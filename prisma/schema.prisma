@@ -1,0 +1,132 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Booking {
+  id                    String   @id @default(cuid())
+  full_name             String
+  email                 String
+  phone                 String?
+  company_name          String?
+  meeting_date          String
+  meeting_time          String
+  meeting_topic         String?
+  service_desired       String?
+  existing_website      String?
+  website_url           String?
+  website_purpose       String?
+  target_audience       String?
+  desired_features      String[]
+  competitors_reference String?
+  desired_result        String?
+  budget_range          String?
+  timeline              String?
+  additional_notes      String?
+  meet_link             String?
+  calendar_event_id     String?
+  status                String   @default("pending")
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+}
+
+model Contact {
+  id           String   @id @default(cuid())
+  full_name    String
+  email        String
+  phone        String?
+  company_name String?
+  source       String   @default("website")
+  status       String   @default("new")
+  created_at   DateTime @default(now())
+}
+
+model Quote {
+  id               String   @id @default(cuid())
+  contact_id       String
+  contact_name     String
+  contact_email    String
+  title            String
+  description      String?
+  service_type     String?
+  status           String   @default("draft")
+  total_amount     Float?
+  currency         String   @default("EUR")
+  line_items       Json?
+  tools_used       String[]
+  desired_outcomes String[]
+  timeline         String?
+  created_at       DateTime @default(now())
+}
+
+model Activity {
+  id               String   @id @default(cuid())
+  type             String
+  contact_id       String?
+  quote_id         String?
+  description      String?
+  details          String?
+  user_id          String?
+  duration_minutes Int?
+  outcome          String?
+  created_at       DateTime @default(now())
+}
+
+model Setting {
+  id   String @id
+  data Json
+}
+
+model ChatSession {
+  sessionId           String   @id
+  clientEmail         String?
+  clientPhone         String?
+  startedAt           DateTime @default(now())
+  endedAt             DateTime?
+  status              String   @default("active")
+  firstMessage        String?
+  messageCount        Int      @default(0)
+  bookedConsultation  Boolean  @default(false)
+  userAgent           String?
+  referrer            String?
+  duration            Int?
+  messages            ChatMessage[]
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   ChatSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model EducationalTemplate {
+  id         String   @id @default(cuid())
+  name       String
+  subject    String
+  content    String
+  service    String?
+  is_default Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  scheduledMessages ScheduledMessage[]
+}
+
+model ScheduledMessage {
+  id            String   @id @default(cuid())
+  templateId    String
+  template      EducationalTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  serviceFilter String?
+  timeFilter    String?
+  scheduledAt   DateTime
+  status        String   @default("pending")
+  createdAt     DateTime @default(now())
+}

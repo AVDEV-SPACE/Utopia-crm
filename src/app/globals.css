@@ -1,0 +1,893 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-bg: #FAF8F5;
+  --color-bg-card: #F2EEE8;
+  --color-bg-dark: #1A1A18;
+  --color-text: #1A1A18;
+  --color-text-muted: #6B6B65;
+  --color-accent: #4A7C59;
+  --color-accent-light: #E8F0EB;
+  --color-border: #E0DBD3;
+  --color-white: #ffffff;
+  --font-serif: var(--font-serif), Georgia, serif;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THEME TOKENS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── LIGHT ─────────────────────────────────────────────────────────── */
+.light {
+  --background: oklch(0.97 0.004 247);
+  --foreground: oklch(0.13 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0 0);
+  --primary: oklch(0.68 0.16 80);
+  --primary-foreground: oklch(0.13 0 0);
+  --secondary: oklch(0.93 0.006 247);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.93 0.006 247);
+  --muted-foreground: oklch(0.44 0 0);
+  --accent: oklch(0.68 0.16 80);
+  --accent-foreground: oklch(0.13 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.87 0.006 247);
+  --input: oklch(0.87 0.006 247);
+  --ring: oklch(0.62 0.17 80);
+  --sidebar: oklch(0.94 0.006 247);
+  --sidebar-foreground: oklch(0.13 0 0);
+  --sidebar-primary: oklch(0.68 0.16 80);
+  --sidebar-primary-foreground: oklch(0.13 0 0);
+  --sidebar-accent: oklch(0.93 0.006 247);
+  --sidebar-accent-foreground: oklch(0.13 0 0);
+  --sidebar-border: oklch(0.87 0.006 247);
+  --sidebar-ring: oklch(0.62 0.17 80);
+}
+
+/* ── AMBER ──────────────────────────────────────────────────────────── */
+.amber {
+  --background: oklch(0.13 0.043 40);
+  --foreground: oklch(0.98 0.003 247);
+  --card: oklch(0.17 0.05 40);
+  --card-foreground: oklch(0.98 0.003 247);
+  --popover: oklch(0.17 0.05 40);
+  --popover-foreground: oklch(0.98 0.003 247);
+  --primary: oklch(0.923 0.032 95.277);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.22 0.055 40);
+  --secondary-foreground: oklch(0.98 0.003 247);
+  --muted: oklch(0.22 0.055 40);
+  --muted-foreground: oklch(0.70 0.04 256);
+  --accent: oklch(0.25 0.06 40);
+  --accent-foreground: oklch(0.98 0.003 247);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.923 0.032 95.277);
+  --sidebar: oklch(0.155 0.05 40);
+  --sidebar-foreground: oklch(0.98 0.003 247);
+  --sidebar-primary: oklch(0.923 0.032 95.277);
+  --sidebar-primary-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-accent: oklch(0.22 0.055 40);
+  --sidebar-accent-foreground: oklch(0.98 0.003 247);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.923 0.032 95.277);
+}
+
+/* ── DARK ───────────────────────────────────────────────────────────── */
+.dark {
+  /* neutral-900 = #171717, stone-900 = #1c1917 — no blue tint */
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.168 0.007 17);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.168 0.007 17);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.929 0.013 255.508);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.21 0.006 17);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.21 0.006 17);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.21 0.006 17);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --sidebar: oklch(0.168 0.007 17);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.21 0.006 17);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BASE
+   ═══════════════════════════════════════════════════════════════════════ */
+@layer base {
+  * {
+    @apply outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   GRADIENT BORDER SYSTEM
+   Direction: left → right (90deg)
+   Transparent on the left, accent bright on the RIGHT.
+   Uses ::before + CSS mask so border-radius is always respected.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Per-theme gradient tokens */
+:root {
+  /* dark (default) — amber, conic so all 4 sides visible */
+  --gb-angle:      90deg;
+  --gb-from:       oklch(0.769 0.188 70 / 0.04);
+  --gb-mid:        oklch(0.769 0.188 70 / 0.22);
+  --gb-to:         oklch(0.769 0.188 70 / 0.55);
+
+  /* element background: very subtle amber tint toward right */
+  --bg-grad-angle: 135deg;
+  --bg-grad-from:  oklch(0.769 0.188 70 / 0.00);
+  --bg-grad-to:    oklch(0.769 0.188 70 / 0.04);
+
+  --app-radius: 0.75rem;
+}
+
+html[data-theme="light"] {
+  --gb-angle:      90deg;
+  --gb-from:       oklch(0.62 0.17 80 / 0.03);
+  --gb-mid:        oklch(0.62 0.17 80 / 0.18);
+  --gb-to:         oklch(0.62 0.17 80 / 0.45);
+
+  --bg-grad-angle: 90deg;
+  --bg-grad-from:  oklch(0.62 0.17 80 / 0.00);
+  --bg-grad-to:    oklch(0.62 0.17 80 / 0.07);
+}
+
+html[data-theme="amber"] {
+  --gb-angle:      90deg;
+  --gb-from:       rgba(168, 160, 152, 0.03);
+  --gb-mid:        rgba(168, 160, 152, 0.15);
+  --gb-to:         rgba(168, 160, 152, 0.42);
+
+  --bg-grad-angle: 90deg;
+  --bg-grad-from:  oklch(0.13 0.043 40 / 0.00);
+  --bg-grad-to:    oklch(0.26 0.07  40 / 0.70);
+}
+
+/* Apply gradient bg + ::before only to elements WITHOUT overflow-hidden */
+.rounded-2xl.border:not(.overflow-hidden),
+.rounded-xl.border:not(.overflow-hidden),
+.rounded-lg.border:not(.overflow-hidden),
+.rounded-2xl[class*="border-stone"]:not(.overflow-hidden),
+.rounded-xl[class*="border-stone"]:not(.overflow-hidden),
+.rounded-lg[class*="border-stone"]:not(.overflow-hidden) {
+  position: relative;
+  background-image: linear-gradient(
+    var(--bg-grad-angle),
+    var(--bg-grad-from),
+    var(--bg-grad-to)
+  ) !important;
+}
+
+.rounded-2xl.border:not(.overflow-hidden)::before,
+.rounded-xl.border:not(.overflow-hidden)::before,
+.rounded-lg.border:not(.overflow-hidden)::before,
+.rounded-2xl[class*="border-stone"]:not(.overflow-hidden)::before,
+.rounded-xl[class*="border-stone"]:not(.overflow-hidden)::before,
+.rounded-lg[class*="border-stone"]:not(.overflow-hidden)::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    var(--gb-angle),
+    var(--gb-from) 0%,
+    var(--gb-mid)  50%,
+    var(--gb-to)   100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  z-index: 0;
+}
+
+/* Content stays above border overlay */
+.rounded-2xl.border:not(.overflow-hidden) > *,
+.rounded-xl.border:not(.overflow-hidden) > *,
+.rounded-lg.border:not(.overflow-hidden) > *,
+.rounded-2xl[class*="border-stone"]:not(.overflow-hidden) > *,
+.rounded-xl[class*="border-stone"]:not(.overflow-hidden) > *,
+.rounded-lg[class*="border-stone"]:not(.overflow-hidden) > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Divider lines (h-px) left→right fade ───────────────────────────── */
+.h-px {
+  height: 1px;
+  border: none;
+  background: linear-gradient(
+    to right,
+    var(--gb-from) 0%,
+    var(--gb-mid)  45%,
+    var(--gb-to)   100%
+  ) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DARK THEME OVERRIDES
+   All backgrounds unified to neutral-900 (#171717) — no blue, no split.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+html[data-theme="dark"],
+html:not([data-theme]) {
+  background-color: oklch(0.155 0.004 17);
+}
+
+/* Every hardcoded dark background class → neutral-900 */
+html[data-theme="dark"] body,
+html:not([data-theme]) body,
+html[data-theme="dark"] .bg-neutral-900,
+html:not([data-theme]) .bg-neutral-900,
+html[data-theme="dark"] main,
+html:not([data-theme]) main {
+  background-color: oklch(0.155 0.004 17) !important;
+}
+
+/* bg-[#0d0d0d] hardcoded — map to stone-950 equivalent */
+html[data-theme="dark"] [class*="bg-\\[#0d0d0d\\]"],
+html:not([data-theme]) [class*="bg-\\[#0d0d0d\\]"] {
+  background-color: oklch(0.12 0.004 17) !important;
+}
+
+/* Cards slightly lighter — stone-900 tone, no blue */
+html[data-theme="dark"] .bg-stone-900,
+html:not([data-theme]) .bg-stone-900 {
+  background-color: oklch(0.168 0.007 17) !important;
+}
+html[data-theme="dark"] .bg-stone-900\/80,
+html:not([data-theme]) .bg-stone-900\/80 {
+  background-color: oklch(0.168 0.007 17 / 0.92) !important;
+}
+html[data-theme="dark"] .bg-stone-950,
+html:not([data-theme]) .bg-stone-950 {
+  background-color: oklch(0.12 0.004 17) !important;
+}
+
+/* Sidebar and header — slight elevation above page bg */
+html[data-theme="dark"] aside,
+html:not([data-theme]) aside {
+  background-color: oklch(0.168 0.007 17) !important;
+}
+html[data-theme="dark"] header,
+html:not([data-theme]) header {
+  background-color: oklch(0.162 0.005 17 / 0.97) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIGHT THEME OVERRIDES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+html[data-theme="light"] {
+  background-color: oklch(0.97 0.004 247);
+  color: oklch(0.13 0 0);
+}
+
+/* Page background */
+html[data-theme="light"] body,
+html[data-theme="light"] .bg-neutral-900,
+html[data-theme="light"] .bg-neutral-100,
+html[data-theme="light"] .bg-stone-900,
+html[data-theme="light"] .bg-stone-950,
+html[data-theme="light"] main {
+  background-color: oklch(0.97 0.004 247) !important;
+}
+
+/* Card surfaces — clean white with slight warmth */
+html[data-theme="light"] .bg-stone-900\/40,
+html[data-theme="light"] .bg-stone-900\/50,
+html[data-theme="light"] .bg-stone-900\/80,
+html[data-theme="light"] .bg-stone-950\/60,
+html[data-theme="light"] .bg-stone-800 {
+  background-color: oklch(1 0 0 / 0.92) !important;
+}
+
+/* Text — high contrast on white */
+html[data-theme="light"] .text-white         { color: oklch(0.10 0 0) !important; }
+html[data-theme="light"] .text-stone-200,
+html[data-theme="light"] .text-stone-300     { color: oklch(0.22 0 0) !important; }
+html[data-theme="light"] .text-stone-400     { color: oklch(0.35 0 0) !important; }
+html[data-theme="light"] .text-stone-500     { color: oklch(0.46 0 0) !important; }
+html[data-theme="light"] .text-stone-600     { color: oklch(0.54 0 0) !important; }
+html[data-theme="light"] .text-stone-700     { color: oklch(0.62 0 0) !important; }
+
+/* Amber accents — darker for light bg contrast */
+html[data-theme="light"] .text-amber-400     { color: oklch(0.50 0.17 72) !important; }
+html[data-theme="light"] .bg-amber-500\/10   { background-color: oklch(0.68 0.16 80 / 0.13) !important; }
+html[data-theme="light"] .border-amber-500\/20 { border-color: oklch(0.62 0.17 80 / 0.40) !important; }
+
+/* Borders — visible amber-tinted grey */
+html[data-theme="light"] .border-stone-700\/40,
+html[data-theme="light"] .border-stone-700\/50,
+html[data-theme="light"] .border-stone-800\/50,
+html[data-theme="light"] .border-stone-800\/60,
+html[data-theme="light"] .border-stone-700 {
+  border-color: oklch(0.68 0.16 80 / 0.28) !important;
+}
+
+/* Sidebar and header */
+html[data-theme="light"] aside {
+  background-color: oklch(0.94 0.006 247) !important;
+  border-right-color: oklch(0.87 0.006 247) !important;
+}
+html[data-theme="light"] header {
+  background-color: oklch(0.94 0.006 247 / 0.97) !important;
+  border-bottom-color: oklch(0.87 0.006 247) !important;
+}
+
+/* Header background per theme */
+html[data-theme="dark"] header,
+html:not([data-theme]) header {
+  background-color: oklch(0.168 0.007 17 / 0.97) !important;
+}
+
+html[data-theme="amber"] header {
+  background-color: oklch(0.155 0.05 40 / 0.97) !important;
+}
+
+/* Salon selector button backgrounds */
+html[data-theme="dark"] .selector-bg,
+html:not([data-theme]) .selector-bg {
+  background-color: oklch(0.13 0.004 17) !important;
+}
+
+html[data-theme="light"] .selector-bg {
+  background-color: oklch(0.99 0 0) !important;
+}
+
+html[data-theme="amber"] .selector-bg {
+  background-color: oklch(0.11 0.035 40) !important;
+}
+
+/* Selector border */
+html[data-theme="dark"] .selector-border,
+html:not([data-theme]) .selector-border {
+  border-color: oklch(0.769 0.188 70 / 0.20) !important;
+}
+
+html[data-theme="light"] .selector-border {
+  border-color: oklch(0.68 0.16 80 / 0.30) !important;
+}
+
+html[data-theme="amber"] .selector-border {
+  border-color: oklch(1 0 0 / 0.12) !important;
+}
+
+/* Dropdown bg */
+html[data-theme="dark"] .dropdown-bg,
+html:not([data-theme]) .dropdown-bg {
+  background-color: oklch(0.11 0.004 17) !important;
+}
+
+html[data-theme="light"] .dropdown-bg {
+  background-color: oklch(0.99 0 0) !important;
+}
+
+html[data-theme="amber"] .dropdown-bg {
+  background-color: oklch(0.11 0.035 40) !important;
+}
+
+/* Dropdown border */
+html[data-theme="dark"] .dropdown-border,
+html:not([data-theme]) .dropdown-border {
+  border-color: oklch(1 0 0 / 0.10) !important;
+}
+
+html[data-theme="light"] .dropdown-border {
+  border-color: oklch(0.68 0.16 80 / 0.25) !important;
+}
+
+html[data-theme="amber"] .dropdown-border {
+  border-color: oklch(1 0 0 / 0.10) !important;
+}
+
+/* Dropdown header bg */
+html[data-theme="dark"] .dropdown-hdr-bg,
+html:not([data-theme]) .dropdown-hdr-bg {
+  background-color: oklch(0.15 0.005 17) !important;
+}
+
+html[data-theme="light"] .dropdown-hdr-bg {
+  background-color: oklch(0.95 0.006 247) !important;
+}
+
+html[data-theme="amber"] .dropdown-hdr-bg {
+  background-color: oklch(0.14 0.04 40) !important;
+}
+
+/* Text primary */
+html[data-theme="dark"] .text-primary,
+html:not([data-theme]) .text-primary {
+  color: oklch(0.95 0 0) !important;
+}
+
+html[data-theme="light"] .text-primary {
+  color: oklch(0.15 0 0) !important;
+}
+
+html[data-theme="amber"] .text-primary {
+  color: oklch(0.95 0 0) !important;
+}
+
+/* Text secondary */
+html[data-theme="dark"] .text-secondary,
+html:not([data-theme]) .text-secondary {
+  color: oklch(0.50 0 0) !important;
+}
+
+html[data-theme="light"] .text-secondary {
+  color: oklch(0.45 0 0) !important;
+}
+
+html[data-theme="amber"] .text-secondary {
+  color: oklch(0.55 0.02 40) !important;
+}
+
+/* Inputs */
+html[data-theme="light"] input,
+html[data-theme="light"] select {
+  background-color: oklch(0.99 0 0) !important;
+  color: oklch(0.10 0 0) !important;
+  border-color: oklch(0.68 0.16 80 / 0.28) !important;
+}
+html[data-theme="light"] input::placeholder  { color: oklch(0.58 0 0) !important; }
+
+/* Hover states */
+html[data-theme="light"] .hover\:bg-stone-800\/80:hover,
+html[data-theme="light"] .hover\:bg-stone-800:hover {
+  background-color: oklch(0.89 0.006 247) !important;
+}
+
+/* Dividers */
+html[data-theme="light"] .divide-stone-800\/50 > * + * {
+  border-color: oklch(0.68 0.16 80 / 0.15) !important;
+}
+
+/* Modals & fixed overlays in light theme — override dark hardcoded backgrounds */
+html[data-theme="light"] .fixed.inset-0.flex div[class*="bg-"],
+html[data-theme="light"] div[class*="rounded-2xl"][class*="shadow-2xl"],
+html[data-theme="light"] div[class*="rounded-xl"][class*="shadow-2xl"] {
+  background-color: oklch(0.99 0 0) !important;
+  color: oklch(0.10 0 0) !important;
+}
+
+/* Specifically target modal containers that use inline bg classes */
+html[data-theme="light"] .fixed.inset-0.flex .border.border-stone-700\/50.rounded-2xl {
+  background-color: oklch(0.99 0 0) !important;
+}
+
+/* Modal sticky header bar */
+html[data-theme="light"] .sticky.top-0.z-10 {
+  background-color: oklch(0.99 0 0) !important;
+  border-bottom-color: oklch(0.87 0.006 247) !important;
+}
+
+/* Dropdown panels (search results, salon selector) */
+html[data-theme="light"] .absolute.z-50 {
+  background-color: oklch(0.99 0 0) !important;
+  border-color: oklch(0.87 0.006 247) !important;
+  color: oklch(0.10 0 0) !important;
+}
+html[data-theme="light"] .absolute.z-50 button {
+  color: oklch(0.30 0 0) !important;
+}
+html[data-theme="light"] .absolute.z-50 button:hover {
+  background-color: oklch(0.93 0.006 247) !important;
+  color: oklch(0.10 0 0) !important;
+}
+
+/* Availability modal (fixed, not inside .fixed.flex) */
+html[data-theme="light"] .fixed.inset-0.z-50 > div {
+  background-color: oklch(0.99 0 0) !important;
+  color: oklch(0.10 0 0) !important;
+}
+html[data-theme="light"] .fixed.inset-0.z-50 select,
+html[data-theme="light"] .fixed.inset-0.z-50 input {
+  background-color: oklch(0.96 0.004 247) !important;
+  color: oklch(0.10 0 0) !important;
+  border-color: oklch(0.68 0.16 80 / 0.28) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AMBER THEME OVERRIDES
+   Page bg = same amber as sidebar, no split.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+html[data-theme="amber"] {
+  background-color: oklch(0.13 0.043 40);
+  color: oklch(0.98 0.003 247);
+}
+
+/* Page / layout */
+html[data-theme="amber"] body,
+html[data-theme="amber"] .bg-neutral-900,
+html[data-theme="amber"] .bg-neutral-100,
+html[data-theme="amber"] main {
+  background-color: oklch(0.13 0.043 40) !important;
+}
+
+/* Stone overrides → amber palette */
+html[data-theme="amber"] .bg-stone-900      { background-color: oklch(0.155 0.048 40) !important; }
+html[data-theme="amber"] .bg-stone-950      { background-color: oklch(0.11  0.035 40) !important; }
+html[data-theme="amber"] .bg-stone-800      { background-color: oklch(0.20  0.055 40) !important; }
+html[data-theme="amber"] .bg-stone-900\/40  { background-color: oklch(0.17  0.05  40 / 0.60) !important; }
+html[data-theme="amber"] .bg-stone-900\/50  { background-color: oklch(0.17  0.05  40 / 0.72) !important; }
+html[data-theme="amber"] .bg-stone-900\/80  { background-color: oklch(0.17  0.05  40 / 0.88) !important; }
+html[data-theme="amber"] .bg-stone-950\/60  { background-color: oklch(0.13  0.038 40 / 0.82) !important; }
+
+/* Sidebar and header */
+html[data-theme="amber"] aside {
+  background-color: oklch(0.155 0.05 40) !important;
+  border-right-color: oklch(1 0 0 / 0.08) !important;
+}
+html[data-theme="amber"] header {
+  background-color: oklch(0.155 0.05 40 / 0.97) !important;
+  border-bottom-color: oklch(1 0 0 / 0.08) !important;
+}
+
+/* Borders */
+html[data-theme="amber"] .border-stone-700\/40,
+html[data-theme="amber"] .border-stone-700\/50,
+html[data-theme="amber"] .border-stone-800\/50,
+html[data-theme="amber"] .border-stone-800\/60 {
+  border-color: oklch(1 0 0 / 0.10) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BORDER-RADIUS — consistent app-wide
+   ═══════════════════════════════════════════════════════════════════════ */
+
+aside nav a,
+aside nav button {
+  border-radius: var(--app-radius) !important;
+}
+
+header input,
+header select,
+header button:not([class*="rounded-full"]) {
+  border-radius: var(--app-radius) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   HEADER SEARCH — NO LAYOUT SHIFT ON DROPDOWN OPEN
+   ═══════════════════════════════════════════════════════════════════════ */
+
+header .flex-1.relative {
+  overflow: visible !important;
+  align-self: center;
+}
+
+header > div.flex {
+  height: 3.25rem;
+  align-items: center;
+}
+
+header .flex-1.relative > div.absolute {
+  position: absolute !important;
+  top: calc(100% + 0.375rem) !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 9999 !important;
+}
+
+header input[type="text"] {
+  height: 2.375rem;
+  box-sizing: border-box;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   OVERFLOW-HIDDEN TABLE CONTAINERS — gradient border via background+padding
+
+   When rounded + border + overflow-hidden are on the same element,
+   ::before pseudo-element gets CLIPPED.
+
+   Solution: "background padding border" technique
+   - Set the gradient as the element's background
+   - Add 1px padding so the gradient shows as a border
+   - Force direct children's background to match the page bg
+   - This works EVEN with overflow-hidden because background is never clipped
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.rounded-2xl.overflow-hidden[class*="border-stone"],
+.rounded-xl.overflow-hidden[class*="border-stone"],
+.rounded-2xl.overflow-hidden.border,
+.rounded-xl.overflow-hidden.border {
+  border: none !important;
+  padding: 1px !important;
+  background: linear-gradient(
+    var(--gb-angle),
+    var(--gb-from) 0%,
+    var(--gb-mid)  50%,
+    var(--gb-to)   100%
+  ) !important;
+}
+
+/* Inner content bg — fill over gradient so only the 1px edge shows as border */
+html[data-theme="dark"] .rounded-2xl.overflow-hidden[class*="border-stone"] > *,
+html[data-theme="dark"] .rounded-xl.overflow-hidden[class*="border-stone"] > *,
+html[data-theme="dark"] .rounded-2xl.overflow-hidden.border > *,
+html[data-theme="dark"] .rounded-xl.overflow-hidden.border > *,
+html:not([data-theme]) .rounded-2xl.overflow-hidden[class*="border-stone"] > *,
+html:not([data-theme]) .rounded-xl.overflow-hidden[class*="border-stone"] > *,
+html:not([data-theme]) .rounded-2xl.overflow-hidden.border > *,
+html:not([data-theme]) .rounded-xl.overflow-hidden.border > * {
+  background-color: oklch(0.155 0.004 17) !important;
+}
+
+html[data-theme="light"] .rounded-2xl.overflow-hidden[class*="border-stone"],
+html[data-theme="light"] .rounded-xl.overflow-hidden[class*="border-stone"],
+html[data-theme="light"] .rounded-2xl.overflow-hidden.border,
+html[data-theme="light"] .rounded-xl.overflow-hidden.border {
+  background: linear-gradient(
+    var(--gb-angle),
+    var(--gb-from) 0%,
+    var(--gb-mid)  50%,
+    var(--gb-to)   100%
+  ) !important;
+}
+html[data-theme="light"] .rounded-2xl.overflow-hidden[class*="border-stone"] > *,
+html[data-theme="light"] .rounded-xl.overflow-hidden[class*="border-stone"] > *,
+html[data-theme="light"] .rounded-2xl.overflow-hidden.border > *,
+html[data-theme="light"] .rounded-xl.overflow-hidden.border > * {
+  background-color: oklch(0.99 0 0) !important;
+}
+
+/* Table rows/cells inside gb-wrap — light theme */
+html[data-theme="light"] .gb-wrap > div,
+html[data-theme="light"] .gb-wrap .overflow-hidden,
+html[data-theme="light"] .gb-wrap tbody tr,
+html[data-theme="light"] .gb-wrap tbody td {
+  background-color: oklch(0.99 0 0) !important;
+}
+/* thead keeps its own bg-stone-900/40 class — no override here */
+html[data-theme="light"] .gb-wrap tbody tr:hover {
+  background-color: oklch(0.95 0.004 247) !important;
+}
+
+html[data-theme="amber"] .rounded-2xl.overflow-hidden[class*="border-stone"],
+html[data-theme="amber"] .rounded-xl.overflow-hidden[class*="border-stone"],
+html[data-theme="amber"] .rounded-2xl.overflow-hidden.border,
+html[data-theme="amber"] .rounded-xl.overflow-hidden.border {
+  background: linear-gradient(
+    var(--gb-angle),
+    var(--gb-from) 0%,
+    var(--gb-mid)  50%,
+    var(--gb-to)   100%
+  ) !important;
+}
+html[data-theme="amber"] .rounded-2xl.overflow-hidden[class*="border-stone"] > *,
+html[data-theme="amber"] .rounded-xl.overflow-hidden[class*="border-stone"] > *,
+html[data-theme="amber"] .rounded-2xl.overflow-hidden.border > *,
+html[data-theme="amber"] .rounded-xl.overflow-hidden.border > * {
+  background-color: oklch(0.13 0.043 40) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   UTILITIES
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.radious { border-radius: var(--app-radius); }
+.text-1  { @apply text-neutral-400; }
+.text-2  { @apply text-neutral-200; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CUSTOM SCROLLBAR — modal-scroll class
+   Thin, dark, styled to match app aesthetic across themes.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* For Webkit browsers (Chrome, Safari, Edge) */
+.modal-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.modal-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.modal-scroll::-webkit-scrollbar-thumb {
+  background: oklch(0.923 0.032 95.277 / 0.35);
+  border-radius: 99px;
+}
+.modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.923 0.032 95.277 / 0.60);
+}
+
+/* Firefox */
+.modal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.923 0.032 95.277 / 0.35) transparent;
+}
+
+/* General app scrollbars — thinner, less intrusive */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.30 0 0 / 0.50);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.923 0.032 95.277 / 0.45);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: oklch(0.70 0 0 / 0.35);
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.62 0.17 80 / 0.55);
+}
+
+html[data-theme="amber"] ::-webkit-scrollbar-thumb {
+  background: oklch(0.40 0.02 40 / 0.50);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AVAILABILITY MODAL — day button text visibility fix
+   When a day button is selected (bg-amber-500), the sub-text (date number)
+   must be visible in black, not muted grey.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+button.bg-amber-500 span,
+button.bg-amber-500 p,
+button[class*="bg-amber-500"] span,
+button[class*="bg-amber-500"] p {
+  color: inherit !important;
+}
+
+/* Also ensure the number below day abbreviation is visible */
+.bg-amber-500 .text-stone-600,
+.bg-amber-500 .text-stone-500,
+.bg-amber-500 .text-stone-400 {
+  color: oklch(0.20 0 0) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TIME SLOT BUTTONS — Add Client modal
+   Force dark bg + visible text regardless of theme overrides.
+   The grid of time buttons uses bg-stone-900/60 + text-stone-500 which
+   gets washed out in light theme.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Unselected time slot: always dark pill */
+html[data-theme="light"] .grid.grid-cols-5 button:not(.bg-amber-500) {
+  background-color: oklch(0.87 0.006 247) !important;
+  border-color: oklch(0.68 0.16 80 / 0.25) !important;
+  color: oklch(0.25 0 0) !important;
+}
+html[data-theme="light"] .grid.grid-cols-5 button:not(.bg-amber-500):hover {
+  background-color: oklch(0.82 0.01 247) !important;
+  border-color: oklch(0.62 0.17 80 / 0.50) !important;
+  color: oklch(0.10 0 0) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AVAILABILITY MODAL — selected day button text fix
+   When a day is selected (bg-amber-500 text-black), the date number
+   inside must be dark/black, not amber/orange.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+button.bg-amber-500 div,
+button[class*="bg-amber-500"] div {
+  color: oklch(0.15 0 0) !important;
+}
+
+/* Dark theme: ensure day number date is readable in non-selected enabled days */
+html[data-theme="dark"] button .text-amber-400,
+html:not([data-theme]) button .text-amber-400 {
+  color: oklch(0.769 0.188 70) !important;
+}
+
+/* Availability modal backdrop — ensure modal content is always dark in dark/amber theme */
+html[data-theme="dark"] .fixed.inset-0.bg-black\/70 > div,
+html:not([data-theme]) .fixed.inset-0.bg-black\/70 > div {
+  background-color: oklch(0.12 0.004 17) !important;
+  color: oklch(0.95 0 0) !important;
+}
+html[data-theme="amber"] .fixed.inset-0.bg-black\/70 > div {
+  background-color: oklch(0.155 0.05 40) !important;
+  color: oklch(0.95 0 0) !important;
+}
+
+/* Availability modal inner content bg — scrollable section */
+html[data-theme="dark"] .fixed.inset-0.bg-black\/70 > div .overflow-y-auto,
+html:not([data-theme]) .fixed.inset-0.bg-black\/70 > div .overflow-y-auto {
+  background-color: oklch(0.12 0.004 17) !important;
+}
+html[data-theme="amber"] .fixed.inset-0.bg-black\/70 > div .overflow-y-auto {
+  background-color: oklch(0.155 0.05 40) !important;
+}
+
+/* Day selector buttons in availability modal — non-selected enabled */
+html[data-theme="dark"] .fixed.inset-0.bg-black\/70 button.bg-stone-800\/80,
+html:not([data-theme]) .fixed.inset-0.bg-black\/70 button.bg-stone-800\/80 {
+  background-color: oklch(0.20 0.006 17) !important;
+  color: oklch(0.85 0 0) !important;
+}
+
+/* Selects in availability modal */
+html[data-theme="dark"] .fixed.inset-0.bg-black\/70 select,
+html:not([data-theme]) .fixed.inset-0.bg-black\/70 select {
+  background-color: oklch(0.18 0.006 17) !important;
+  color: oklch(0.95 0 0) !important;
+  border-color: oklch(0.769 0.188 70 / 0.25) !important;
+}
+html[data-theme="amber"] .fixed.inset-0.bg-black\/70 select {
+  background-color: oklch(0.20 0.05 40) !important;
+  color: oklch(0.95 0 0) !important;
+}
+
+/* Preview box inside availability modal */
+html[data-theme="dark"] .fixed.inset-0.bg-black\/70 .bg-stone-900\/40,
+html:not([data-theme]) .fixed.inset-0.bg-black\/70 .bg-stone-900\/40 {
+  background-color: oklch(0.18 0.006 17 / 0.60) !important;
+}
