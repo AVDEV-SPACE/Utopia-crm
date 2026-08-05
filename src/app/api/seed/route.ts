@@ -2,6 +2,8 @@
 import { sql } from '@/lib/neon';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const predefinedTemplates = [
   {
     title: "Tips pentru Consultație Gratuită",

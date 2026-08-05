@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { sendEmail, sendSMS, stripHtml, isEmailConfigured, isSmsConfigured } from '@/lib/messaging';
 
+export const dynamic = 'force-dynamic';
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function getStartDate(timeFilter: string | null): Date | null {
   if (!timeFilter || timeFilter === 'all') return null;

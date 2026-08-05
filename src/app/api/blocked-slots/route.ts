@@ -3,6 +3,8 @@ import { sql } from '@/lib/neon';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
+export const dynamic = 'force-dynamic';
+
 async function ensureTable() {
   await sql`
     CREATE TABLE IF NOT EXISTS blocked_slots (

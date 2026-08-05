@@ -5,6 +5,8 @@ import { WebhookEvent } from '@clerk/nextjs/server';
 import { sql } from '@/lib/neon';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: Request) {
   console.log('🔔 Webhook received at:', new Date().toISOString());
 

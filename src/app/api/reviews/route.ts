@@ -2,6 +2,8 @@
 import { sql } from '@/lib/neon';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const data = await sql`SELECT * FROM internal_reviews ORDER BY created_at DESC`;

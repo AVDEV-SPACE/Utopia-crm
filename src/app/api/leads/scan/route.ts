@@ -7,6 +7,8 @@ import { insertLead } from '@/services/leads/repository';
 import { tryAcquireRateLimit } from '@/services/leads/rate-limit';
 import { Lead } from '@/services/leads/types';
 
+export const dynamic = 'force-dynamic';
+
 const SCAN_RATE_LIMIT_MS = 10_000;
 
 export async function POST(req: NextRequest) {

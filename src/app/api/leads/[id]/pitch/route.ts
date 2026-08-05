@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getLeadById, updateLead } from '@/services/leads/repository';
 import { generatePitch } from '@/services/leads/pitch';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;

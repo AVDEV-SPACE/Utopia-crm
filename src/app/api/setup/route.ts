@@ -1,6 +1,8 @@
 import { sql } from '@/lib/neon';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST() {
   try {
     // crm_users — utilizatori CRM (sync din Clerk)
