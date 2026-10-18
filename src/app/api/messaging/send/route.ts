@@ -2,6 +2,8 @@ import { sql } from '@/lib/neon';
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { sendEmail, sendSMS, stripHtml, isEmailConfigured, isSmsConfigured } from '@/lib/messaging';
+import { tenantIdFor } from '@/lib/tenant';
+import { logSentMessages } from '@/services/messages/repository';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +18,7 @@ function getStartDate(timeFilter: string | null): Date | null {
 // ── POST ───────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = await auth();
+    const { userId, orgId } = await auth();
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
@@ -232,24 +234,65 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Trimitere imediată ─────────────────────────────────────────────────
+    // Conținutul se calculează întâi, ca să poată fi și trimis, și jurnalizat.
+    const payloads = recipients.map(r => {
+      // Destinatar din leads → folosește pitch-ul propriu generat, nu template-ul comun
+      if (r.pitch_generated) {
+        return {
+          recipient: r,
+          subject: (r.pitch_subject as string | null) || 'Mesaj de la Utopia Systems',
+          html: r.pitch_generated as string,
+          templateTitle: 'Pitch personalizat',
+        };
+      }
+      // Destinatar din contacts/bookings → template-ul comun selectat
+      return {
+        recipient: r,
+        subject: template!.title,
+        html: template!.content.replace(/\{\{name\}\}/g, r.name || 'Client'),
+        templateTitle: template!.title,
+      };
+    });
+
     const results = await Promise.allSettled(
-      recipients.map(r => {
-        // Destinatar din leads → folosește pitch-ul propriu generat, nu template-ul comun
-        if (r.pitch_generated) {
-          const subject = r.pitch_subject || 'Mesaj de la Utopia Systems';
-          if (channel === 'sms') {
-            return sendSMS(r.phone!, stripHtml(r.pitch_generated));
-          }
-          return sendEmail(r.email, subject, r.pitch_generated);
-        }
-        // Destinatar din contacts/bookings → template-ul comun selectat
-        const text = template!.content.replace(/\{\{name\}\}/g, r.name || 'Client');
-        if (channel === 'sms') {
-          return sendSMS(r.phone!, stripHtml(text));
-        }
-        return sendEmail(r.email, template!.title, text);
-      })
+      payloads.map(({ recipient: r, subject, html }) =>
+        channel === 'sms' ? sendSMS(r.phone!, stripHtml(html)) : sendEmail(r.email, subject, html)
+      )
     );
+
+    // Jurnal (vizibil în /educational-templates → „Mesaje & Mail-uri Trimise”
+    // și în /lead-generation → filtrul „Pitched”). Nu trebuie să rupă răspunsul:
+    // mesajele au plecat deja către destinatari.
+    try {
+      await logSentMessages(
+        { orgId: tenantIdFor(orgId, userId), userId },
+        payloads.map(({ recipient: r, subject, html, templateTitle }, i) => {
+          const result = results[i];
+          return {
+            channel: channel as 'email' | 'sms',
+            recipient_type: r.lead_id ? ('lead' as const) : ('client' as const),
+            lead_id: (r.lead_id as string | undefined) ?? null,
+            recipient_name: (r.name as string | null) ?? null,
+            recipient_email: (r.email as string | null) ?? null,
+            recipient_phone: (r.phone as string | null) ?? null,
+            template_id: templateId ? String(templateId) : null,
+            template_title: templateTitle,
+            subject: channel === 'sms' ? null : subject,
+            body: channel === 'sms' ? stripHtml(html) : html,
+            status: result.status === 'fulfilled' ? ('sent' as const) : ('failed' as const),
+            error:
+              result.status === 'rejected'
+                ? String(result.reason?.message ?? result.reason).slice(0, 500)
+                : null,
+            // sendEmail întoarce Message-ID-ul; sendSMS nu întoarce nimic
+            message_id:
+              result.status === 'fulfilled' && typeof result.value === 'string' ? result.value : null,
+          };
+        })
+      );
+    } catch (logErr) {
+      console.error('Nu am putut jurnaliza mesajele trimise:', logErr);
+    }
 
     const failed = results.filter(r => r.status === 'rejected') as PromiseRejectedResult[];
     const sent = results.length - failed.length;

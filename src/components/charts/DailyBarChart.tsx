@@ -35,22 +35,16 @@ export function DailyBarChart({ data }: DailyBarChartProps) {
     switch (theme) {
       case 'light':
         return {
-          bar: '#eab308',
+          bar: '#1c3b66',
           background: '#ffffff',
-          text: '#1f2937',
-        };
-      case 'amber':
-        return {
-          bar: '#fbbf24',
-          background: '#1c1917',
-          text: '#fef3c7',
+          text: '#070d18',
         };
       case 'dark':
       default:
         return {
-          bar: '#a1a1aa',
-          background: '#18181b',
-          text: '#d4d4d8',
+          bar: '#5f8fc6',
+          background: '#0c1a2e',
+          text: '#cfe1f7',
         };
     }
   };

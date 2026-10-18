@@ -37,27 +37,19 @@ export function ServicePieChart({ data }: ServicePieChartProps) {
     switch (theme) {
       case 'light':
         return {
-          text: '#1a1a1a',
+          text: '#070d18',
           cardBg: '#ffffff',
-          border: 'oklch(0.87 0.006 247)',
-          mutedText: '#666666',
-          rowHover: '#f5f5f5',
-        };
-      case 'amber':
-        return {
-          text: 'oklch(0.98 0.003 247)',
-          cardBg: 'oklch(0.17 0.05 40)',
-          border: 'oklch(1 0 0 / 10%)',
-          mutedText: 'oklch(0.65 0.03 40)',
-          rowHover: 'oklch(0.20 0.055 40)',
+          border: 'rgb(28 59 102 / 0.22)',
+          mutedText: '#2c4f7d',
+          rowHover: '#eef5ff',
         };
       default:
         return {
-          text: 'oklch(0.984 0.003 247.858)',
-          cardBg: 'oklch(0.168 0.007 17)',
-          border: 'oklch(1 0 0 / 10%)',
-          mutedText: 'oklch(0.55 0.006 17)',
-          rowHover: 'oklch(0.21 0.006 17)',
+          text: '#eef5ff',
+          cardBg: '#0c1a2e',
+          border: 'rgb(143 184 230 / 0.14)',
+          mutedText: '#a9cbf0',
+          rowHover: '#122a4c',
         };
     }
   };

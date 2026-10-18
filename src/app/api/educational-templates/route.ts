@@ -32,15 +32,15 @@ export async function POST(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { title, content, service } = body;
+    const { title, content, service, case_type } = body;
 
     if (!title || !content) {
       return NextResponse.json({ error: 'Missing required fields: title and content' }, { status: 400 });
     }
 
     const result = await sql`
-      INSERT INTO educational_templates (title, content, service, created_by)
-      VALUES (${title}, ${content}, ${service || null}, ${userId})
+      INSERT INTO educational_templates (title, content, service, case_type, created_by)
+      VALUES (${title}, ${content}, ${service || null}, ${case_type || null}, ${userId})
       RETURNING *
     `;
 
@@ -58,7 +58,7 @@ export async function PUT(req: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { id, title, content, service } = body;
+    const { id, title, content, service, case_type } = body;
 
     if (!id || !title || !content) {
       return NextResponse.json({ error: 'Missing required fields: id, title, content' }, { status: 400 });
@@ -66,7 +66,8 @@ export async function PUT(req: NextRequest) {
 
     const result = await sql`
       UPDATE educational_templates
-      SET title = ${title}, content = ${content}, service = ${service || null}, updated_at = NOW()
+      SET title = ${title}, content = ${content}, service = ${service || null},
+          case_type = ${case_type || null}, updated_at = NOW()
       WHERE id = ${id} AND created_by = ${userId}
       RETURNING *
     `;

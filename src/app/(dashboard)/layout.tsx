@@ -19,16 +19,25 @@ export default function DashboardLayout({
     <ThemeProvider
       attribute="data-theme"
       defaultTheme="dark"
-      enableSystem
+      themes={['light', 'dark']}
+      storageKey="kspot-theme"
+      enableSystem={false}
       disableTransitionOnChange
     >
+      {/* Rulează după scriptul injectat de next-themes și normalizează valorile
+          vechi din localStorage (ex. „amber", temă eliminată) la `dark`, ca
+          `data-theme` să rămână mereu pe una dintre cele două teme cu reguli CSS. */}
       <script
         dangerouslySetInnerHTML={{
           __html: `
             (function() {
               try {
-                const theme = localStorage.getItem('kspot-theme') || 'dark';
-                document.documentElement.setAttribute('data-theme', theme);
+                var t = localStorage.getItem('kspot-theme');
+                if (t !== 'light' && t !== 'dark') {
+                  t = 'dark';
+                  localStorage.setItem('kspot-theme', t);
+                }
+                document.documentElement.setAttribute('data-theme', t);
               } catch (e) {}
             })();
           `,

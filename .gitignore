@@ -46,3 +46,6 @@ next-env.d.ts
 Thumbs.db
 
 .vercel
+
+# build-uri de verificare (distDir alternativ)
+/.next-verify/

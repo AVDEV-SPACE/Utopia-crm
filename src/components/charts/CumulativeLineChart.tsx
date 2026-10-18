@@ -43,25 +43,18 @@ export function CumulativeBarChart({ data, title = "Programări zilnice" }: Cumu
     switch (theme) {
       case 'light':
         return {
-          background: 'oklch(0.97 0.004 247)',
-          text: 'oklch(0.13 0 0)',
-          cardBg: 'oklch(1 0 0)',
-          border: 'oklch(0.87 0.006 247)',
-        };
-      case 'amber':
-        return {
-          background: 'oklch(0.13 0.043 40)',
-          text: 'oklch(0.98 0.003 247)',
-          cardBg: 'oklch(0.17 0.05 40)',
-          border: 'oklch(1 0 0 / 10%)',
+          background: 'oklch(79.749% 0.03063 257.821)',
+          text: '#070d18',
+          cardBg: '#ffffff',
+          border: 'rgb(28 59 102 / 0.22)',
         };
       case 'dark':
       default:
         return {
-          background: 'oklch(0.145 0 0)',
-          text: 'oklch(0.984 0.003 247.858)',
-          cardBg: 'oklch(0.168 0.007 17)',
-          border: 'oklch(1 0 0 / 10%)',
+          background: '#070d18',
+          text: '#eef5ff',
+          cardBg: '#0c1a2e',
+          border: 'rgb(143 184 230 / 0.14)',
         };
     }
   };

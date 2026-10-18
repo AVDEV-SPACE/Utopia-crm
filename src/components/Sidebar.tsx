@@ -1,8 +1,8 @@
 // src/components/Sidebar.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { UserButton, useUser } from '@clerk/nextjs';
 import {
   LayoutDashboard,
@@ -12,8 +12,11 @@ import {
   Mail,
   BookOpen,
   Target,
+  Bot,
+  Database,
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const menuItems = [
   { name: 'Overview',    href: '/overview',                icon: LayoutDashboard },
@@ -21,39 +24,21 @@ const menuItems = [
   { name: 'Chats',  href: '/messaging',               icon: Mail },
   { name: 'Emails',  href: '/educational-templates',   icon: BookOpen },
   { name: 'Lead Generation', href: '/lead-generation',     icon: Target },
+  { name: 'Leads',       href: '/leads',                   icon: Database },
+  { name: 'AI Follow-Up', href: '/dashboard/follow-ups-ai', icon: Bot },
 ];
 
 export default function Sidebar() {
-  const router = useRouter();
   const pathname = usePathname();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { user, isLoaded } = useUser();
-  const [theme, setTheme] = useState<'light' | 'dark' | 'amber'>('dark');
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('kspot-theme') as 'light' | 'dark' | 'amber';
-    if (savedTheme) {
-      setTheme(savedTheme);
-    }
-
-    const interval = setInterval(() => {
-      const newTheme = localStorage.getItem('kspot-theme') as 'light' | 'dark' | 'amber';
-      if (newTheme) {
-        setTheme((prev) => (prev === newTheme ? prev : newTheme));
-      }
-    }, 500);
-
-    return () => clearInterval(interval);
-    // rulează o singură dată la mount — citește tema curentă prin funcția de update,
-    // nu prin dependency, ca să nu recreeze interval-ul la fiecare schimbare
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const bgClass = theme === 'light' ? 'bg-stone-100' : theme === 'amber' ? 'bg-amber-950' : 'bg-stone-900';
-  const textClass = theme === 'light' ? 'text-stone-900' : 'text-white';
-  const borderClass = theme === 'light' ? 'border-stone-300' : theme === 'amber' ? 'border-amber-900/50' : 'border-stone-800/60';
-  const mutedClass = theme === 'light' ? 'text-stone-600' : 'text-stone-500';
+  // Culorile vin din scara de culori a temei (globals.css), nu din JS —
+  // aceleași clase dau nuanțele corecte și pe light, și pe dark.
+  const bgClass = 'bg-stone-900';
+  const textClass = 'text-stone-100';
+  const borderClass = 'border-stone-800/60';
+  const mutedClass = 'text-stone-500';
 
   return (
     <>
@@ -70,11 +55,20 @@ export default function Sidebar() {
         isCollapsed ? 'w-[72px]' : 'w-60'
       } ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         {/* Logo */}
-        <div className={`flex items-center justify-between h-16 px-4  ${borderClass}`}>
-          <Link href="/overview" className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/20">
-              <span className="text-black font-bold text-base tracking-tight">C</span>
-            </div>
+        {/* Pe 72px (collapsed) logo-ul + butonul nu încap pe același rând: containerul
+            se strânge, iar `max-width:100%` din preflight ar turti imaginea. De aceea
+            butonul de extindere trece pe rândul de dedesubt când e collapsed. */}
+        <div className={`flex items-center h-16 ${isCollapsed ? 'justify-center px-2' : 'justify-between px-4'} ${borderClass}`}>
+          <Link href="/overview" className="flex items-center gap-3 min-w-0 shrink-0">
+            {/* Logo-ul are deja fundal și colțuri rotunjite în imagine */}
+            <Image
+              src="/favicon-96x96.png"
+              alt="Utopia CRM"
+              width={36}
+              height={36}
+              priority
+              className="w-9 h-9 max-w-none shrink-0 rounded-xl shadow-md shadow-black/30"
+            />
             {!isCollapsed && (
               <div className="min-w-0">
                 <p className={`text-sm font-semibold ${textClass} tracking-wide truncate`}>CRM Tools</p>
@@ -83,15 +77,28 @@ export default function Sidebar() {
             )}
           </Link>
 
-          <button onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg hover:bg-stone-800 transition-colors hidden lg:flex items-center justify-center flex-shrink-0">
-            <ChevronLeft className={`h-4 w-4 text-stone-500 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} />
-          </button>
-          <button onClick={() => setIsMobileOpen(false)}
-            className="p-1.5 rounded-lg hover:bg-stone-800 lg:hidden">
-            <ChevronLeft className="h-4 w-4 text-stone-500" />
-          </button>
+          {!isCollapsed && (
+            <>
+              <button onClick={() => setIsCollapsed(true)}
+                title="Restrânge meniul"
+                className="p-1.5 rounded-lg hover:bg-stone-800 transition-colors hidden lg:flex items-center justify-center shrink-0">
+                <ChevronLeft className="h-4 w-4 text-stone-500 transition-transform duration-300" />
+              </button>
+              <button onClick={() => setIsMobileOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-stone-800 lg:hidden shrink-0">
+                <ChevronLeft className="h-4 w-4 text-stone-500" />
+              </button>
+            </>
+          )}
         </div>
+
+        {isCollapsed && (
+          <button onClick={() => setIsCollapsed(false)}
+            title="Extinde meniul"
+            className="hidden lg:flex items-center justify-center h-8 mx-2 rounded-lg hover:bg-stone-800 transition-colors shrink-0">
+            <ChevronLeft className="h-4 w-4 text-stone-500 rotate-180" />
+          </button>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 p-3 overflow-y-auto">

@@ -50,102 +50,233 @@
   --color-accent-light: #E8F0EB;
   --color-border: #E0DBD3;
   --color-white: #ffffff;
-  --font-serif: var(--font-serif), Georgia, serif;
+  --font-serif: var(--font-instrument-serif), Georgia, serif;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PALETA APLICAȚIEI  (referința de design Overview)
+   Neutre calde (cerneală ↔ hârtie) + accent portocaliu. Singura sursă de
+   culoare a temei — pagina Overview își citește tokenurile tot de aici.
+   `ink-*` = treptele închise (suprafețe în dark, text în light),
+   `paper-*` = treptele deschise (text în dark, suprafețe în light).
+   ═══════════════════════════════════════════════════════════════════════ */
+:root {
+  --ink-950: #080706;
+  --ink-900: #0E0D0B;
+  --ink-800: #171512;
+  --ink-700: #211E1A;
+  --ink-600: #2A2622;
+  --ink-500: #3D3832;
+  --paper-500: #6B655C;
+  --paper-400: #9A9388;
+  --paper-300: #C9C2B6;
+  --paper-200: #DDD7CC;
+  --paper-100: #EAE5DC;
+  --paper-050: #F4F1EC;
+  --paper-surface: #FBFAF7;
+
+  --accent-500: #F2541B;
+  --accent-600: #D9450F;
+  --accent-700: #B23810;
+
+  --success: #1E8E5A;
+  --warning: #D9A52B;
+  --danger:  #D9402B;
+  --info:    #6B5BD6;
+
+  /* Accent activ + componentele lui RGB, pentru variante cu transparență */
+  --brand: var(--accent-500);
+  --brand-strong: var(--accent-600);
+  --brand-ink: #ffffff;
+  --brand-rgb: 242 84 27;
+
+  /* Liniile (borduri, gradienți de contur, scrollbar) sunt neutre, nu accent */
+  --line-rgb: 244 241 236;
+}
+
+html[data-theme="light"] {
+  --line-rgb: 22 19 15;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SCARA DE CULORI  —  singura sursă de nuanțe pentru carduri și texte
+
+   Utilitarele Tailwind v4 se compilează ca `var(--color-<scara>-<treaptă>)`,
+   inclusiv variantele cu transparență (`color-mix(... var(--color-x) ...)`).
+   Rescriind aici scările, TOATE clasele existente din componente primesc
+   nuanțele temei — fără să atingem sutele de clase din JSX și fără ca
+   `stone-*` și `neutral-*` să mai arate diferit (sursa asimetriei de până acum).
+
+   `stone` și `neutral` = aceeași rampă, ca suprafețele să fie identice
+   indiferent ce scară a folosit componenta. `amber`/`orange` = accentul.
+   Roșu / galben / verde rămân neatinse: sunt culori semantice (scor, status).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── DARK: treptele mici = text deschis, treptele mari = suprafețe închise ── */
+:root,
+html[data-theme="dark"],
+html:not([data-theme]) {
+  --color-stone-50:  #F7F4EF;
+  --color-stone-100: #EFEBE4;
+  --color-stone-200: #DDD7CC;
+  --color-stone-300: #C9C2B6;
+  --color-stone-400: #9A9388;
+  --color-stone-500: #857E73;
+  --color-stone-600: #6B655C;
+  --color-stone-700: #2A2622;
+  --color-stone-800: #211E1A;
+  --color-stone-900: #171512;
+  --color-stone-950: #0E0D0B;
+
+  --color-neutral-50:  #F7F4EF;
+  --color-neutral-100: #EFEBE4;
+  --color-neutral-200: #DDD7CC;
+  --color-neutral-300: #C9C2B6;
+  --color-neutral-400: #9A9388;
+  --color-neutral-500: #857E73;
+  --color-neutral-600: #6B655C;
+  --color-neutral-700: #2A2622;
+  --color-neutral-800: #211E1A;
+  --color-neutral-900: #171512;
+  --color-neutral-950: #0E0D0B;
+
+  /* Accent — butoane pline, tab-uri active, iconițe */
+  --color-amber-50:  #FEF0EA;
+  --color-amber-300: #F8A07E;
+  --color-amber-400: #F57A4C;
+  --color-amber-500: #F2541B;
+  --color-amber-900: #3A1708;
+  --color-amber-950: #1F0D05;
+
+  --color-orange-400: #F57A4C;
+  --color-orange-500: #F2541B;
+  --color-orange-600: #D9450F;
+  --color-orange-700: #B23810;
+}
+
+/* ── LIGHT: rampă inversată — treptele mici = text închis, cele mari = suprafețe deschise ── */
+html[data-theme="light"] {
+  --color-stone-50:  #0E0D0B;
+  --color-stone-100: #16130F;
+  --color-stone-200: #221E19;
+  --color-stone-300: #3A352F;
+  --color-stone-400: #5A544C;
+  --color-stone-500: #7A746B;
+  --color-stone-600: #8F887D;
+  --color-stone-700: #D6D0C5;
+  --color-stone-800: #E6E1D8;
+  --color-stone-900: #FBFAF7;
+  --color-stone-950: #F4F1EC;
+
+  --color-neutral-50:  #0E0D0B;
+  --color-neutral-100: #16130F;
+  --color-neutral-200: #221E19;
+  --color-neutral-300: #3A352F;
+  --color-neutral-400: #5A544C;
+  --color-neutral-500: #7A746B;
+  --color-neutral-600: #8F887D;
+  --color-neutral-700: #D6D0C5;
+  --color-neutral-800: #E6E1D8;
+  --color-neutral-900: #FBFAF7;
+  --color-neutral-950: #F4F1EC;
+
+  /* Accent — aceeași nuanță; treptele folosite ca text sunt mai închise, pentru contrast */
+  --color-amber-50:  #FEF0EA;
+  --color-amber-300: #B23810;
+  --color-amber-400: #D9450F;
+  --color-amber-500: #F2541B;
+  --color-amber-900: #FBD9CB;
+  --color-amber-950: #FEF0EA;
+
+  --color-orange-400: #D9450F;
+  --color-orange-500: #F2541B;
+  --color-orange-600: #D9450F;
+  --color-orange-700: #B23810;
+}
+
+/* Butoanele pline pe accent au text alb, indiferent ce culoare de text e hardcodată */
+.bg-amber-500.text-black, .bg-amber-400.text-black,
+.bg-amber-500 .text-black, .bg-amber-400 .text-black { color: #ffffff !important; }
+
+/* `gray-*` e folosit și de paginile de auth/OTP, care au fundal alb propriu —
+   scara rămâne neatinsă, remapăm doar treptele folosite ca text în dashboard. */
+html[data-theme="dark"] .text-gray-300,
+html:not([data-theme]) .text-gray-300 { color: var(--color-stone-300); }
+html[data-theme="dark"] .text-gray-400,
+html:not([data-theme]) .text-gray-400 { color: var(--color-stone-400); }
+html[data-theme="dark"] .text-gray-500,
+html:not([data-theme]) .text-gray-500 { color: var(--color-stone-500); }
+html[data-theme="light"] .text-gray-300 { color: var(--color-stone-300); }
+html[data-theme="light"] .text-gray-400 { color: var(--color-stone-400); }
+html[data-theme="light"] .text-gray-500 { color: var(--color-stone-500); }
 
 /* ═══════════════════════════════════════════════════════════════════════
    THEME TOKENS
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── LIGHT ─────────────────────────────────────────────────────────── */
-.light {
-  --background: oklch(0.97 0.004 247);
-  --foreground: oklch(0.13 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0 0);
-  --primary: oklch(0.68 0.16 80);
-  --primary-foreground: oklch(0.13 0 0);
-  --secondary: oklch(0.93 0.006 247);
-  --secondary-foreground: oklch(0.2 0 0);
-  --muted: oklch(0.93 0.006 247);
-  --muted-foreground: oklch(0.44 0 0);
-  --accent: oklch(0.68 0.16 80);
-  --accent-foreground: oklch(0.13 0 0);
+/* Aplicația comută prin `data-theme`, nu prin clasă — de aceea ambele selectoare. */
+.light,
+html[data-theme="light"] {
+  --background: var(--paper-050);
+  --foreground: var(--ink-900);
+  --card: var(--paper-surface);
+  --card-foreground: var(--ink-900);
+  --popover: var(--paper-surface);
+  --popover-foreground: var(--ink-900);
+  --primary: var(--ink-600);
+  --primary-foreground: var(--paper-050);
+  --secondary: var(--paper-100);
+  --secondary-foreground: var(--ink-800);
+  --muted: var(--paper-100);
+  --muted-foreground: var(--ink-500);
+  --accent: var(--paper-100);
+  --accent-foreground: var(--ink-900);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.87 0.006 247);
-  --input: oklch(0.87 0.006 247);
-  --ring: oklch(0.62 0.17 80);
-  --sidebar: oklch(0.94 0.006 247);
-  --sidebar-foreground: oklch(0.13 0 0);
-  --sidebar-primary: oklch(0.68 0.16 80);
-  --sidebar-primary-foreground: oklch(0.13 0 0);
-  --sidebar-accent: oklch(0.93 0.006 247);
-  --sidebar-accent-foreground: oklch(0.13 0 0);
-  --sidebar-border: oklch(0.87 0.006 247);
-  --sidebar-ring: oklch(0.62 0.17 80);
-}
-
-/* ── AMBER ──────────────────────────────────────────────────────────── */
-.amber {
-  --background: oklch(0.13 0.043 40);
-  --foreground: oklch(0.98 0.003 247);
-  --card: oklch(0.17 0.05 40);
-  --card-foreground: oklch(0.98 0.003 247);
-  --popover: oklch(0.17 0.05 40);
-  --popover-foreground: oklch(0.98 0.003 247);
-  --primary: oklch(0.923 0.032 95.277);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.22 0.055 40);
-  --secondary-foreground: oklch(0.98 0.003 247);
-  --muted: oklch(0.22 0.055 40);
-  --muted-foreground: oklch(0.70 0.04 256);
-  --accent: oklch(0.25 0.06 40);
-  --accent-foreground: oklch(0.98 0.003 247);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.923 0.032 95.277);
-  --sidebar: oklch(0.155 0.05 40);
-  --sidebar-foreground: oklch(0.98 0.003 247);
-  --sidebar-primary: oklch(0.923 0.032 95.277);
-  --sidebar-primary-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-accent: oklch(0.22 0.055 40);
-  --sidebar-accent-foreground: oklch(0.98 0.003 247);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.923 0.032 95.277);
+  --border: rgb(var(--line-rgb) / 0.12);
+  --input: rgb(var(--line-rgb) / 0.16);
+  --ring: var(--accent-500);
+  --sidebar: var(--paper-surface);
+  --sidebar-foreground: var(--ink-900);
+  --sidebar-primary: var(--ink-600);
+  --sidebar-primary-foreground: var(--paper-050);
+  --sidebar-accent: var(--paper-100);
+  --sidebar-accent-foreground: var(--ink-900);
+  --sidebar-border: rgb(var(--line-rgb) / 0.12);
+  --sidebar-ring: var(--paper-500);
 }
 
 /* ── DARK ───────────────────────────────────────────────────────────── */
-.dark {
-  /* neutral-900 = #171717, stone-900 = #1c1917 — no blue tint */
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.168 0.007 17);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.168 0.007 17);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.21 0.006 17);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.21 0.006 17);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.21 0.006 17);
-  --accent-foreground: oklch(0.984 0.003 247.858);
+.dark,
+html[data-theme="dark"],
+html:not([data-theme]) {
+  /* Neutre calde: --ink-900 fundal, --ink-800 suprafețe */
+  --background: var(--ink-900);
+  --foreground: var(--paper-050);
+  --card: var(--ink-800);
+  --card-foreground: var(--paper-050);
+  --popover: var(--ink-800);
+  --popover-foreground: var(--paper-050);
+  --primary: var(--paper-300);
+  --primary-foreground: var(--ink-950);
+  --secondary: var(--ink-700);
+  --secondary-foreground: var(--paper-050);
+  --muted: var(--ink-700);
+  --muted-foreground: var(--paper-200);
+  --accent: var(--ink-700);
+  --accent-foreground: var(--paper-050);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --sidebar: oklch(0.168 0.007 17);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.21 0.006 17);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --border: rgb(var(--line-rgb) / 0.10);
+  --input: rgb(var(--line-rgb) / 0.14);
+  --ring: var(--accent-500);
+  --sidebar: var(--ink-800);
+  --sidebar-foreground: var(--paper-050);
+  --sidebar-primary: var(--paper-300);
+  --sidebar-primary-foreground: var(--ink-950);
+  --sidebar-accent: var(--ink-700);
+  --sidebar-accent-foreground: var(--paper-050);
+  --sidebar-border: rgb(var(--line-rgb) / 0.10);
+  --sidebar-ring: var(--paper-500);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -167,42 +298,31 @@
    Uses ::before + CSS mask so border-radius is always respected.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* Per-theme gradient tokens */
+/* Per-theme gradient tokens — derivate din accentul temei */
 :root {
-  /* dark (default) — amber, conic so all 4 sides visible */
+  /* dark (implicit) — linie neutră, aproape plată */
   --gb-angle:      90deg;
-  --gb-from:       oklch(0.769 0.188 70 / 0.04);
-  --gb-mid:        oklch(0.769 0.188 70 / 0.22);
-  --gb-to:         oklch(0.769 0.188 70 / 0.55);
+  --gb-from:       rgb(var(--line-rgb) / 0.08);
+  --gb-mid:        rgb(var(--line-rgb) / 0.09);
+  --gb-to:         rgb(var(--line-rgb) / 0.12);
 
-  /* element background: very subtle amber tint toward right */
+  /* element background: tentă albastră foarte discretă spre dreapta */
   --bg-grad-angle: 135deg;
-  --bg-grad-from:  oklch(0.769 0.188 70 / 0.00);
-  --bg-grad-to:    oklch(0.769 0.188 70 / 0.04);
+  --bg-grad-from:  rgb(var(--line-rgb) / 0.00);
+  --bg-grad-to:    rgb(var(--line-rgb) / 0.00);
 
-  --app-radius: 0.75rem;
+  --app-radius: 6px;
 }
 
 html[data-theme="light"] {
   --gb-angle:      90deg;
-  --gb-from:       oklch(0.62 0.17 80 / 0.03);
-  --gb-mid:        oklch(0.62 0.17 80 / 0.18);
-  --gb-to:         oklch(0.62 0.17 80 / 0.45);
+  --gb-from:       rgb(var(--line-rgb) / 0.10);
+  --gb-mid:        rgb(var(--line-rgb) / 0.11);
+  --gb-to:         rgb(var(--line-rgb) / 0.14);
 
   --bg-grad-angle: 90deg;
-  --bg-grad-from:  oklch(0.62 0.17 80 / 0.00);
-  --bg-grad-to:    oklch(0.62 0.17 80 / 0.07);
-}
-
-html[data-theme="amber"] {
-  --gb-angle:      90deg;
-  --gb-from:       rgba(168, 160, 152, 0.03);
-  --gb-mid:        rgba(168, 160, 152, 0.15);
-  --gb-to:         rgba(168, 160, 152, 0.42);
-
-  --bg-grad-angle: 90deg;
-  --bg-grad-from:  oklch(0.13 0.043 40 / 0.00);
-  --bg-grad-to:    oklch(0.26 0.07  40 / 0.70);
+  --bg-grad-from:  rgb(var(--line-rgb) / 0.00);
+  --bg-grad-to:    rgb(var(--line-rgb) / 0.00);
 }
 
 /* Apply gradient bg + ::before only to elements WITHOUT overflow-hidden */
@@ -274,52 +394,50 @@ html[data-theme="amber"] {
 
 /* ═══════════════════════════════════════════════════════════════════════
    DARK THEME OVERRIDES
-   All backgrounds unified to neutral-900 (#171717) — no blue, no split.
+   Toate fundalurile pe neutrele calde ale paletei.
    ═══════════════════════════════════════════════════════════════════════ */
 
 html[data-theme="dark"],
 html:not([data-theme]) {
-  background-color: oklch(0.155 0.004 17);
+  background-color: var(--ink-900);
 }
 
-/* Every hardcoded dark background class → neutral-900 */
+/* Doar fundalul structural al paginii — suprafețele vin din scara de culori */
 html[data-theme="dark"] body,
 html:not([data-theme]) body,
-html[data-theme="dark"] .bg-neutral-900,
-html:not([data-theme]) .bg-neutral-900,
 html[data-theme="dark"] main,
 html:not([data-theme]) main {
-  background-color: oklch(0.155 0.004 17) !important;
+  background-color: var(--ink-900) !important;
 }
 
-/* bg-[#0d0d0d] hardcoded — map to stone-950 equivalent */
+/* bg-[#0d0d0d] hardcodat — cel mai închis nivel */
 html[data-theme="dark"] [class*="bg-\\[#0d0d0d\\]"],
 html:not([data-theme]) [class*="bg-\\[#0d0d0d\\]"] {
-  background-color: oklch(0.12 0.004 17) !important;
+  background-color: var(--ink-950) !important;
 }
 
-/* Cards slightly lighter — stone-900 tone, no blue */
-html[data-theme="dark"] .bg-stone-900,
-html:not([data-theme]) .bg-stone-900 {
-  background-color: oklch(0.168 0.007 17) !important;
-}
-html[data-theme="dark"] .bg-stone-900\/80,
-html:not([data-theme]) .bg-stone-900\/80 {
-  background-color: oklch(0.168 0.007 17 / 0.92) !important;
-}
-html[data-theme="dark"] .bg-stone-950,
-html:not([data-theme]) .bg-stone-950 {
-  background-color: oklch(0.12 0.004 17) !important;
-}
-
-/* Sidebar and header — slight elevation above page bg */
+/* Sidebar și header — ușor ridicate față de fundalul paginii */
 html[data-theme="dark"] aside,
 html:not([data-theme]) aside {
-  background-color: oklch(0.168 0.007 17) !important;
+  background-color: var(--ink-800) !important;
 }
 html[data-theme="dark"] header,
 html:not([data-theme]) header {
-  background-color: oklch(0.162 0.005 17 / 0.97) !important;
+  background-color: rgb(23 21 18 / 0.97) !important;
+}
+
+/* Bordurile stone → linie neutră discretă */
+html[data-theme="dark"] .border-stone-700\/40,
+html[data-theme="dark"] .border-stone-700\/50,
+html[data-theme="dark"] .border-stone-800\/50,
+html[data-theme="dark"] .border-stone-800\/60,
+html[data-theme="dark"] .border-neutral-800,
+html:not([data-theme]) .border-stone-700\/40,
+html:not([data-theme]) .border-stone-700\/50,
+html:not([data-theme]) .border-stone-800\/50,
+html:not([data-theme]) .border-stone-800\/60,
+html:not([data-theme]) .border-neutral-800 {
+  border-color: rgb(var(--line-rgb) / 0.14) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -327,112 +445,71 @@ html:not([data-theme]) header {
    ═══════════════════════════════════════════════════════════════════════ */
 
 html[data-theme="light"] {
-  background-color: oklch(0.97 0.004 247);
-  color: oklch(0.13 0 0);
+  /* Fundalul cerut pentru tema deschisă */
+  background-color: var(--paper-050);
+  color: var(--ink-900);
 }
 
-/* Page background */
+/* Doar fundalul structural al paginii — suprafețele vin din scara de culori */
 html[data-theme="light"] body,
-html[data-theme="light"] .bg-neutral-900,
-html[data-theme="light"] .bg-neutral-100,
-html[data-theme="light"] .bg-stone-900,
-html[data-theme="light"] .bg-stone-950,
 html[data-theme="light"] main {
-  background-color: oklch(0.97 0.004 247) !important;
+  background-color: var(--paper-050) !important;
 }
 
-/* Card surfaces — clean white with slight warmth */
-html[data-theme="light"] .bg-stone-900\/40,
-html[data-theme="light"] .bg-stone-900\/50,
-html[data-theme="light"] .bg-stone-900\/80,
-html[data-theme="light"] .bg-stone-950\/60,
-html[data-theme="light"] .bg-stone-800 {
-  background-color: oklch(1 0 0 / 0.92) !important;
-}
+/* `text-white` e hardcodat pe titluri și pe butoane pline deopotrivă:
+   pe fundal deschis devine cerneală, dar rămâne alb pe suprafețele de accent. */
+html[data-theme="light"] .text-white { color: var(--ink-950) !important; }
+html[data-theme="light"] :is(.bg-orange-500, .bg-orange-600, .bg-orange-700, .bg-amber-400, .bg-amber-500) .text-white,
+html[data-theme="light"] :is(.bg-orange-500, .bg-orange-600, .bg-orange-700, .bg-amber-400, .bg-amber-500).text-white { color: #ffffff !important; }
 
-/* Text — high contrast on white */
-html[data-theme="light"] .text-white         { color: oklch(0.10 0 0) !important; }
-html[data-theme="light"] .text-stone-200,
-html[data-theme="light"] .text-stone-300     { color: oklch(0.22 0 0) !important; }
-html[data-theme="light"] .text-stone-400     { color: oklch(0.35 0 0) !important; }
-html[data-theme="light"] .text-stone-500     { color: oklch(0.46 0 0) !important; }
-html[data-theme="light"] .text-stone-600     { color: oklch(0.54 0 0) !important; }
-html[data-theme="light"] .text-stone-700     { color: oklch(0.62 0 0) !important; }
-
-/* Amber accents — darker for light bg contrast */
-html[data-theme="light"] .text-amber-400     { color: oklch(0.50 0.17 72) !important; }
-html[data-theme="light"] .bg-amber-500\/10   { background-color: oklch(0.68 0.16 80 / 0.13) !important; }
-html[data-theme="light"] .border-amber-500\/20 { border-color: oklch(0.62 0.17 80 / 0.40) !important; }
-
-/* Borders — visible amber-tinted grey */
+/* Borders */
 html[data-theme="light"] .border-stone-700\/40,
 html[data-theme="light"] .border-stone-700\/50,
 html[data-theme="light"] .border-stone-800\/50,
 html[data-theme="light"] .border-stone-800\/60,
+html[data-theme="light"] .border-neutral-800,
 html[data-theme="light"] .border-stone-700 {
-  border-color: oklch(0.68 0.16 80 / 0.28) !important;
+  border-color: rgb(var(--line-rgb) / 0.24) !important;
 }
 
 /* Sidebar and header */
 html[data-theme="light"] aside {
-  background-color: oklch(0.94 0.006 247) !important;
-  border-right-color: oklch(0.87 0.006 247) !important;
+  background-color: var(--paper-surface) !important;
+  border-right-color: rgb(var(--line-rgb) / 0.22) !important;
 }
 html[data-theme="light"] header {
-  background-color: oklch(0.94 0.006 247 / 0.97) !important;
-  border-bottom-color: oklch(0.87 0.006 247) !important;
-}
-
-/* Header background per theme */
-html[data-theme="dark"] header,
-html:not([data-theme]) header {
-  background-color: oklch(0.168 0.007 17 / 0.97) !important;
-}
-
-html[data-theme="amber"] header {
-  background-color: oklch(0.155 0.05 40 / 0.97) !important;
+  background-color: rgb(251 250 247 / 0.97) !important;
+  border-bottom-color: rgb(var(--line-rgb) / 0.22) !important;
 }
 
 /* Salon selector button backgrounds */
 html[data-theme="dark"] .selector-bg,
 html:not([data-theme]) .selector-bg {
-  background-color: oklch(0.13 0.004 17) !important;
+  background-color: var(--ink-950) !important;
 }
 
 html[data-theme="light"] .selector-bg {
-  background-color: oklch(0.99 0 0) !important;
-}
-
-html[data-theme="amber"] .selector-bg {
-  background-color: oklch(0.11 0.035 40) !important;
+  background-color: var(--paper-surface) !important;
 }
 
 /* Selector border */
 html[data-theme="dark"] .selector-border,
 html:not([data-theme]) .selector-border {
-  border-color: oklch(0.769 0.188 70 / 0.20) !important;
+  border-color: rgb(var(--line-rgb) / 0.20) !important;
 }
 
 html[data-theme="light"] .selector-border {
-  border-color: oklch(0.68 0.16 80 / 0.30) !important;
-}
-
-html[data-theme="amber"] .selector-border {
-  border-color: oklch(1 0 0 / 0.12) !important;
+  border-color: rgb(var(--line-rgb) / 0.30) !important;
 }
 
 /* Dropdown bg */
 html[data-theme="dark"] .dropdown-bg,
 html:not([data-theme]) .dropdown-bg {
-  background-color: oklch(0.11 0.004 17) !important;
+  background-color: var(--ink-950) !important;
 }
 
 html[data-theme="light"] .dropdown-bg {
-  background-color: oklch(0.99 0 0) !important;
-}
-
-html[data-theme="amber"] .dropdown-bg {
-  background-color: oklch(0.11 0.035 40) !important;
+  background-color: var(--paper-surface) !important;
 }
 
 /* Dropdown border */
@@ -442,168 +519,114 @@ html:not([data-theme]) .dropdown-border {
 }
 
 html[data-theme="light"] .dropdown-border {
-  border-color: oklch(0.68 0.16 80 / 0.25) !important;
-}
-
-html[data-theme="amber"] .dropdown-border {
-  border-color: oklch(1 0 0 / 0.10) !important;
+  border-color: rgb(var(--line-rgb) / 0.25) !important;
 }
 
 /* Dropdown header bg */
 html[data-theme="dark"] .dropdown-hdr-bg,
 html:not([data-theme]) .dropdown-hdr-bg {
-  background-color: oklch(0.15 0.005 17) !important;
+  background-color: var(--ink-800) !important;
 }
 
 html[data-theme="light"] .dropdown-hdr-bg {
-  background-color: oklch(0.95 0.006 247) !important;
-}
-
-html[data-theme="amber"] .dropdown-hdr-bg {
-  background-color: oklch(0.14 0.04 40) !important;
+  background-color: var(--paper-surface) !important;
 }
 
 /* Text primary */
 html[data-theme="dark"] .text-primary,
 html:not([data-theme]) .text-primary {
-  color: oklch(0.95 0 0) !important;
+  color: var(--paper-050) !important;
 }
 
 html[data-theme="light"] .text-primary {
-  color: oklch(0.15 0 0) !important;
-}
-
-html[data-theme="amber"] .text-primary {
-  color: oklch(0.95 0 0) !important;
+  color: var(--ink-900) !important;
 }
 
 /* Text secondary */
 html[data-theme="dark"] .text-secondary,
 html:not([data-theme]) .text-secondary {
-  color: oklch(0.50 0 0) !important;
+  color: var(--paper-200) !important;
 }
 
 html[data-theme="light"] .text-secondary {
-  color: oklch(0.45 0 0) !important;
-}
-
-html[data-theme="amber"] .text-secondary {
-  color: oklch(0.55 0.02 40) !important;
+  color: var(--ink-500) !important;
 }
 
 /* Inputs */
 html[data-theme="light"] input,
 html[data-theme="light"] select {
-  background-color: oklch(0.99 0 0) !important;
-  color: oklch(0.10 0 0) !important;
-  border-color: oklch(0.68 0.16 80 / 0.28) !important;
+  background-color: var(--paper-surface) !important;
+  color: var(--ink-950) !important;
+  border-color: rgb(var(--line-rgb) / 0.28) !important;
 }
-html[data-theme="light"] input::placeholder  { color: oklch(0.58 0 0) !important; }
+html[data-theme="light"] input::placeholder  { color: var(--ink-500) !important; }
 
 /* Hover states */
 html[data-theme="light"] .hover\:bg-stone-800\/80:hover,
 html[data-theme="light"] .hover\:bg-stone-800:hover {
-  background-color: oklch(0.89 0.006 247) !important;
+  background-color: var(--paper-100) !important;
 }
 
 /* Dividers */
 html[data-theme="light"] .divide-stone-800\/50 > * + * {
-  border-color: oklch(0.68 0.16 80 / 0.15) !important;
+  border-color: rgb(var(--line-rgb) / 0.15) !important;
 }
 
 /* Modals & fixed overlays in light theme — override dark hardcoded backgrounds */
 html[data-theme="light"] .fixed.inset-0.flex div[class*="bg-"],
 html[data-theme="light"] div[class*="rounded-2xl"][class*="shadow-2xl"],
 html[data-theme="light"] div[class*="rounded-xl"][class*="shadow-2xl"] {
-  background-color: oklch(0.99 0 0) !important;
-  color: oklch(0.10 0 0) !important;
+  background-color: var(--paper-surface) !important;
+  color: var(--ink-950) !important;
 }
 
 /* Specifically target modal containers that use inline bg classes */
 html[data-theme="light"] .fixed.inset-0.flex .border.border-stone-700\/50.rounded-2xl {
-  background-color: oklch(0.99 0 0) !important;
+  background-color: var(--paper-surface) !important;
 }
 
 /* Modal sticky header bar */
 html[data-theme="light"] .sticky.top-0.z-10 {
-  background-color: oklch(0.99 0 0) !important;
-  border-bottom-color: oklch(0.87 0.006 247) !important;
+  background-color: var(--paper-surface) !important;
+  border-bottom-color: rgb(var(--line-rgb) / 0.22) !important;
 }
 
 /* Dropdown panels (search results, salon selector) */
 html[data-theme="light"] .absolute.z-50 {
-  background-color: oklch(0.99 0 0) !important;
-  border-color: oklch(0.87 0.006 247) !important;
-  color: oklch(0.10 0 0) !important;
+  background-color: var(--paper-surface) !important;
+  border-color: rgb(var(--line-rgb) / 0.22) !important;
+  color: var(--ink-950) !important;
 }
 html[data-theme="light"] .absolute.z-50 button {
-  color: oklch(0.30 0 0) !important;
+  color: var(--ink-700) !important;
 }
 html[data-theme="light"] .absolute.z-50 button:hover {
-  background-color: oklch(0.93 0.006 247) !important;
-  color: oklch(0.10 0 0) !important;
+  background-color: var(--paper-100) !important;
+  color: var(--ink-950) !important;
 }
 
 /* Availability modal (fixed, not inside .fixed.flex) */
 html[data-theme="light"] .fixed.inset-0.z-50 > div {
-  background-color: oklch(0.99 0 0) !important;
-  color: oklch(0.10 0 0) !important;
+  background-color: var(--paper-surface) !important;
+  color: var(--ink-950) !important;
 }
 html[data-theme="light"] .fixed.inset-0.z-50 select,
 html[data-theme="light"] .fixed.inset-0.z-50 input {
-  background-color: oklch(0.96 0.004 247) !important;
-  color: oklch(0.10 0 0) !important;
-  border-color: oklch(0.68 0.16 80 / 0.28) !important;
+  background-color: var(--paper-050) !important;
+  color: var(--ink-950) !important;
+  border-color: rgb(var(--line-rgb) / 0.28) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   AMBER THEME OVERRIDES
-   Page bg = same amber as sidebar, no split.
+   BORDER-RADIUS — 6px pe tot ce are contur
+   Excepția e `rounded-full`: pastilele de filtru, switch-ul de temă și
+   avatarele au forma rotundă intenționat, nu ca rază de card.
    ═══════════════════════════════════════════════════════════════════════ */
 
-html[data-theme="amber"] {
-  background-color: oklch(0.13 0.043 40);
-  color: oklch(0.98 0.003 247);
+.border:not([class*="rounded-full"]),
+[class*="border-"]:not([class*="rounded-full"]) {
+  border-radius: var(--app-radius);
 }
-
-/* Page / layout */
-html[data-theme="amber"] body,
-html[data-theme="amber"] .bg-neutral-900,
-html[data-theme="amber"] .bg-neutral-100,
-html[data-theme="amber"] main {
-  background-color: oklch(0.13 0.043 40) !important;
-}
-
-/* Stone overrides → amber palette */
-html[data-theme="amber"] .bg-stone-900      { background-color: oklch(0.155 0.048 40) !important; }
-html[data-theme="amber"] .bg-stone-950      { background-color: oklch(0.11  0.035 40) !important; }
-html[data-theme="amber"] .bg-stone-800      { background-color: oklch(0.20  0.055 40) !important; }
-html[data-theme="amber"] .bg-stone-900\/40  { background-color: oklch(0.17  0.05  40 / 0.60) !important; }
-html[data-theme="amber"] .bg-stone-900\/50  { background-color: oklch(0.17  0.05  40 / 0.72) !important; }
-html[data-theme="amber"] .bg-stone-900\/80  { background-color: oklch(0.17  0.05  40 / 0.88) !important; }
-html[data-theme="amber"] .bg-stone-950\/60  { background-color: oklch(0.13  0.038 40 / 0.82) !important; }
-
-/* Sidebar and header */
-html[data-theme="amber"] aside {
-  background-color: oklch(0.155 0.05 40) !important;
-  border-right-color: oklch(1 0 0 / 0.08) !important;
-}
-html[data-theme="amber"] header {
-  background-color: oklch(0.155 0.05 40 / 0.97) !important;
-  border-bottom-color: oklch(1 0 0 / 0.08) !important;
-}
-
-/* Borders */
-html[data-theme="amber"] .border-stone-700\/40,
-html[data-theme="amber"] .border-stone-700\/50,
-html[data-theme="amber"] .border-stone-800\/50,
-html[data-theme="amber"] .border-stone-800\/60 {
-  border-color: oklch(1 0 0 / 0.10) !important;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   BORDER-RADIUS — consistent app-wide
-   ═══════════════════════════════════════════════════════════════════════ */
 
 aside nav a,
 aside nav button {
@@ -614,6 +637,13 @@ header input,
 header select,
 header button:not([class*="rounded-full"]) {
   border-radius: var(--app-radius) !important;
+}
+
+/* Butoanele pline din /educational-templates (Trimite Acum, Salvează Șablon,
+   Creează Șablon Nou, tab-urile din sidebar) nu au clasă de contur, deci nu erau
+   prinse de regula de mai sus și rămâneau pe rounded-lg = 8px. */
+.educational-templates button:not([class*="rounded-full"]) {
+  border-radius: var(--app-radius);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -679,7 +709,7 @@ html:not([data-theme]) .rounded-2xl.overflow-hidden[class*="border-stone"] > *,
 html:not([data-theme]) .rounded-xl.overflow-hidden[class*="border-stone"] > *,
 html:not([data-theme]) .rounded-2xl.overflow-hidden.border > *,
 html:not([data-theme]) .rounded-xl.overflow-hidden.border > * {
-  background-color: oklch(0.155 0.004 17) !important;
+  background-color: var(--ink-900) !important;
 }
 
 html[data-theme="light"] .rounded-2xl.overflow-hidden[class*="border-stone"],
@@ -697,7 +727,7 @@ html[data-theme="light"] .rounded-2xl.overflow-hidden[class*="border-stone"] > *
 html[data-theme="light"] .rounded-xl.overflow-hidden[class*="border-stone"] > *,
 html[data-theme="light"] .rounded-2xl.overflow-hidden.border > *,
 html[data-theme="light"] .rounded-xl.overflow-hidden.border > * {
-  background-color: oklch(0.99 0 0) !important;
+  background-color: var(--paper-surface) !important;
 }
 
 /* Table rows/cells inside gb-wrap — light theme */
@@ -705,34 +735,32 @@ html[data-theme="light"] .gb-wrap > div,
 html[data-theme="light"] .gb-wrap .overflow-hidden,
 html[data-theme="light"] .gb-wrap tbody tr,
 html[data-theme="light"] .gb-wrap tbody td {
-  background-color: oklch(0.99 0 0) !important;
+  background-color: var(--paper-surface) !important;
 }
 /* thead keeps its own bg-stone-900/40 class — no override here */
 html[data-theme="light"] .gb-wrap tbody tr:hover {
-  background-color: oklch(0.95 0.004 247) !important;
-}
-
-html[data-theme="amber"] .rounded-2xl.overflow-hidden[class*="border-stone"],
-html[data-theme="amber"] .rounded-xl.overflow-hidden[class*="border-stone"],
-html[data-theme="amber"] .rounded-2xl.overflow-hidden.border,
-html[data-theme="amber"] .rounded-xl.overflow-hidden.border {
-  background: linear-gradient(
-    var(--gb-angle),
-    var(--gb-from) 0%,
-    var(--gb-mid)  50%,
-    var(--gb-to)   100%
-  ) !important;
-}
-html[data-theme="amber"] .rounded-2xl.overflow-hidden[class*="border-stone"] > *,
-html[data-theme="amber"] .rounded-xl.overflow-hidden[class*="border-stone"] > *,
-html[data-theme="amber"] .rounded-2xl.overflow-hidden.border > *,
-html[data-theme="amber"] .rounded-xl.overflow-hidden.border > * {
-  background-color: oklch(0.13 0.043 40) !important;
+  background-color: var(--paper-050) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
    UTILITIES
    ═══════════════════════════════════════════════════════════════════════ */
+
+/* Titlul principal al fiecărei rute — același font și aceeași scară ca pe Overview.
+   În `components`, ca utilitarele (ex. culoarea textului) să-l poată suprascrie. */
+@layer components {
+  .page-title {
+    font-family: var(--font-instrument-serif), Georgia, serif;
+    font-weight: 400;
+    font-size: 36px;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  @media (min-width: 640px) {
+    .page-title { font-size: 44px; }
+  }
+}
 
 .radious { border-radius: var(--app-radius); }
 .text-1  { @apply text-neutral-400; }
@@ -751,17 +779,17 @@ html[data-theme="amber"] .rounded-xl.overflow-hidden.border > * {
   background: transparent;
 }
 .modal-scroll::-webkit-scrollbar-thumb {
-  background: oklch(0.923 0.032 95.277 / 0.35);
+  background: rgb(var(--line-rgb) / 0.35);
   border-radius: 99px;
 }
 .modal-scroll::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.923 0.032 95.277 / 0.60);
+  background: rgb(var(--line-rgb) / 0.60);
 }
 
 /* Firefox */
 .modal-scroll {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.923 0.032 95.277 / 0.35) transparent;
+  scrollbar-color: rgb(var(--line-rgb) / 0.35) transparent;
 }
 
 /* General app scrollbars — thinner, less intrusive */
@@ -773,22 +801,18 @@ html[data-theme="amber"] .rounded-xl.overflow-hidden.border > * {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.30 0 0 / 0.50);
+  background: rgb(var(--line-rgb) / 0.30);
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.923 0.032 95.277 / 0.45);
+  background: rgb(var(--line-rgb) / 0.45);
 }
 
 html[data-theme="light"] ::-webkit-scrollbar-thumb {
-  background: oklch(0.70 0 0 / 0.35);
+  background: rgb(var(--line-rgb) / 0.35);
 }
 html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.62 0.17 80 / 0.55);
-}
-
-html[data-theme="amber"] ::-webkit-scrollbar-thumb {
-  background: oklch(0.40 0.02 40 / 0.50);
+  background: rgb(var(--line-rgb) / 0.55);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -808,7 +832,7 @@ button[class*="bg-amber-500"] p {
 .bg-amber-500 .text-stone-600,
 .bg-amber-500 .text-stone-500,
 .bg-amber-500 .text-stone-400 {
-  color: oklch(0.20 0 0) !important;
+  color: var(--brand-ink) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -820,14 +844,14 @@ button[class*="bg-amber-500"] p {
 
 /* Unselected time slot: always dark pill */
 html[data-theme="light"] .grid.grid-cols-5 button:not(.bg-amber-500) {
-  background-color: oklch(0.87 0.006 247) !important;
-  border-color: oklch(0.68 0.16 80 / 0.25) !important;
-  color: oklch(0.25 0 0) !important;
+  background-color: var(--paper-100) !important;
+  border-color: rgb(var(--line-rgb) / 0.25) !important;
+  color: var(--ink-800) !important;
 }
 html[data-theme="light"] .grid.grid-cols-5 button:not(.bg-amber-500):hover {
-  background-color: oklch(0.82 0.01 247) !important;
-  border-color: oklch(0.62 0.17 80 / 0.50) !important;
-  color: oklch(0.10 0 0) !important;
+  background-color: var(--paper-200) !important;
+  border-color: rgb(var(--line-rgb) / 0.50) !important;
+  color: var(--ink-950) !important;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -838,56 +862,45 @@ html[data-theme="light"] .grid.grid-cols-5 button:not(.bg-amber-500):hover {
 
 button.bg-amber-500 div,
 button[class*="bg-amber-500"] div {
-  color: oklch(0.15 0 0) !important;
+  color: var(--brand-ink) !important;
 }
 
 /* Dark theme: ensure day number date is readable in non-selected enabled days */
 html[data-theme="dark"] button .text-amber-400,
 html:not([data-theme]) button .text-amber-400 {
-  color: oklch(0.769 0.188 70) !important;
+  color: var(--brand-strong) !important;
 }
 
 /* Availability modal backdrop — ensure modal content is always dark in dark/amber theme */
 html[data-theme="dark"] .fixed.inset-0.bg-black\/70 > div,
 html:not([data-theme]) .fixed.inset-0.bg-black\/70 > div {
-  background-color: oklch(0.12 0.004 17) !important;
-  color: oklch(0.95 0 0) !important;
-}
-html[data-theme="amber"] .fixed.inset-0.bg-black\/70 > div {
-  background-color: oklch(0.155 0.05 40) !important;
-  color: oklch(0.95 0 0) !important;
+  background-color: var(--ink-950) !important;
+  color: var(--paper-050) !important;
 }
 
 /* Availability modal inner content bg — scrollable section */
 html[data-theme="dark"] .fixed.inset-0.bg-black\/70 > div .overflow-y-auto,
 html:not([data-theme]) .fixed.inset-0.bg-black\/70 > div .overflow-y-auto {
-  background-color: oklch(0.12 0.004 17) !important;
-}
-html[data-theme="amber"] .fixed.inset-0.bg-black\/70 > div .overflow-y-auto {
-  background-color: oklch(0.155 0.05 40) !important;
+  background-color: var(--ink-950) !important;
 }
 
 /* Day selector buttons in availability modal — non-selected enabled */
 html[data-theme="dark"] .fixed.inset-0.bg-black\/70 button.bg-stone-800\/80,
 html:not([data-theme]) .fixed.inset-0.bg-black\/70 button.bg-stone-800\/80 {
-  background-color: oklch(0.20 0.006 17) !important;
-  color: oklch(0.85 0 0) !important;
+  background-color: var(--ink-700) !important;
+  color: var(--paper-100) !important;
 }
 
 /* Selects in availability modal */
 html[data-theme="dark"] .fixed.inset-0.bg-black\/70 select,
 html:not([data-theme]) .fixed.inset-0.bg-black\/70 select {
-  background-color: oklch(0.18 0.006 17) !important;
-  color: oklch(0.95 0 0) !important;
-  border-color: oklch(0.769 0.188 70 / 0.25) !important;
-}
-html[data-theme="amber"] .fixed.inset-0.bg-black\/70 select {
-  background-color: oklch(0.20 0.05 40) !important;
-  color: oklch(0.95 0 0) !important;
+  background-color: var(--ink-700) !important;
+  color: var(--paper-050) !important;
+  border-color: rgb(var(--line-rgb) / 0.25) !important;
 }
 
 /* Preview box inside availability modal */
 html[data-theme="dark"] .fixed.inset-0.bg-black\/70 .bg-stone-900\/40,
 html:not([data-theme]) .fixed.inset-0.bg-black\/70 .bg-stone-900\/40 {
-  background-color: oklch(0.18 0.006 17 / 0.60) !important;
+  background-color: rgb(33 30 26 / 0.60) !important;
 }

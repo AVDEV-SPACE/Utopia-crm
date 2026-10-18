@@ -1,14 +1,21 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { getUserRole } from '@/actions/auth';
+import { resolveUserRole } from '@/lib/authorization';
 
 const isPublicRoute = createRouteMatcher([
   '/',
   '/auth/sign-in(.*)',
   '/auth/sign-up(.*)',
+  '/unauthorized',
   '/api/webhooks/clerk(.*)',
+  // Verificarea allowlist-ului dinaintea înscrierii (formularul de sign-up)
   '/api/check-authorization(.*)',
-  '/api/setup(.*)',
+  // Webhook Twilio — se autentifică prin orgId/apiKey + semnătură X-Twilio-Signature
+  '/api/webhooks/unified(.*)',
+  // Ingest de lead-uri din site — se autentifică prin apiKey în body.
+  // Matcher exact: sub-rutele (/api/leads/scan, /api/leads/[id]) rămân protejate,
+  // iar GET-ul de listare își verifică sesiunea în handler.
+  '/api/leads',
 ]);
 
 const isAssistantRoute = createRouteMatcher(['/appointments(.*)']);
@@ -21,36 +28,38 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
-  const { userId, redirectToSignIn } = await auth();
-  const pathname = req.nextUrl.pathname;
-
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
 
+  const { userId } = await auth();
+  const pathname = req.nextUrl.pathname;
+  // API-urile răspund cu JSON; un redirect spre o pagină HTML ar fi interpretat greșit de fetch
+  const isApi = pathname.startsWith('/api/');
+
   if (!userId) {
+    if (isApi) return NextResponse.json({ error: 'Neautentificat' }, { status: 401 });
     const signInUrl = new URL('/auth/sign-in', req.url);
     signInUrl.searchParams.set('redirect_url', pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  if (isProtectedRoute(req)) {
-    try {
-      const role = await getUserRole(userId);
+  // Orice rută ne-publică (pagini ȘI API) cere un cont din allowlist — un cont
+  // Clerk oarecare nu e suficient. La eroare, accesul se refuză (fail closed).
+  let role: Awaited<ReturnType<typeof resolveUserRole>> = null;
+  try {
+    role = await resolveUserRole(userId);
+  } catch (error) {
+    console.error('Middleware: verificarea autorizării a eșuat:', error);
+  }
 
-      if (role === 'assistant') {
-        if (!isAssistantRoute(req)) {
-          return NextResponse.redirect(new URL('/appointments', req.url));
-        }
-      }
+  if (!role) {
+    if (isApi) return NextResponse.json({ error: 'Acces neautorizat' }, { status: 403 });
+    return NextResponse.redirect(new URL('/unauthorized', req.url));
+  }
 
-      return NextResponse.next();
-    } catch (error) {
-      console.error('Middleware error - getUserRole failed:', error);
-      const signInUrl = new URL('/auth/sign-in', req.url);
-      signInUrl.searchParams.set('error', 'auth_error');
-      return NextResponse.redirect(signInUrl);
-    }
+  if (role === 'assistant' && isProtectedRoute(req) && !isAssistantRoute(req)) {
+    return NextResponse.redirect(new URL('/appointments', req.url));
   }
 
   return NextResponse.next();
@@ -58,7 +67,11 @@ export default clerkMiddleware(async (auth, req) => {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    // Fișierele statice din /public (logo-uri, favicon-uri, fonturi) trebuie
+    // excluse după extensie, nu doar `favicon.ico`: altfel middleware-ul le
+    // redirecționează spre sign-in și rămân neîncărcate pentru vizitatorii
+    // neautentificați (tab-ul browserului, pagina de login).
+    '/((?!_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|woff2?|ttf)$).*)',
     '/',
   ],
 };

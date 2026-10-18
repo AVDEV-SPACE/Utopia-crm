@@ -114,6 +114,8 @@ export async function GET() {
       configured: true,
       sessions:   row ? Number(row[0].value) : 0,
       pageviews:  row ? Number(row[1].value) : 0,
+      // Raportul complet din GA4, deschis din cardul de pe Overview
+      reportUrl:  `https://analytics.google.com/analytics/web/#/p${GA4_PROPERTY_ID}/reports/intelligenthome`,
     });
 
   } catch (error) {

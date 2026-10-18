@@ -1,0 +1,37 @@
+/* Tokenurile paginii citesc paleta globală (globals.css), ca Overview să aibă
+   exact aceleași nuanțe ca restul aplicației. */
+.root {
+  --ov-bg: var(--paper-050);
+  --ov-surface: var(--paper-surface);
+  --ov-ink: var(--ink-900);
+  --ov-muted: var(--color-stone-500);
+  --ov-border: rgb(var(--line-rgb) / 0.12);
+  --ov-accent: var(--accent-500);
+  --ov-hero: var(--ink-900);
+  --ov-hero-ink: var(--paper-050);
+  --ov-hero-muted: var(--paper-400);
+  --ov-success: var(--success);  --ov-success-bg: rgb(30 142 90 / .12);
+  --ov-warning: #B8861A;         --ov-warning-bg: rgb(217 165 43 / .16);
+  --ov-danger: var(--danger);    --ov-danger-bg: rgb(217 64 43 / .12);
+  --ov-info: var(--info);        --ov-info-bg: rgb(107 91 214 / .12);
+
+  color: var(--ov-ink);
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+:global(html[data-theme="dark"]) .root,
+:global(html:not([data-theme])) .root {
+  --ov-bg: var(--ink-900);
+  --ov-surface: var(--ink-800);
+  --ov-ink: var(--paper-050);
+  --ov-muted: var(--paper-400);
+  --ov-hero: var(--ink-950);
+  --ov-warning: var(--warning);
+  --ov-success-bg: rgb(30 142 90 / .16);
+  --ov-danger-bg: rgb(217 64 43 / .16);
+  --ov-info: #9A8CF0;  --ov-info-bg: rgb(107 91 214 / .2);
+}
+
+.serif { font-family: var(--font-instrument-serif), Georgia, serif; font-weight: 400; }
+.mono  { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; }
+.num   { font-variant-numeric: tabular-nums; }

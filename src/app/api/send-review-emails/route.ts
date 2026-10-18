@@ -10,7 +10,8 @@ const transporter = nodemailer.createTransport({
   secure: false,
   auth: {
     user: process.env.EMAIL_FROM_ADDRESS || 'avdev.space@gmail.com',
-    pass: process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS || 'niuo pxhu uwdy otia',
+    // Fără fallback în cod: un secret scris aici ajunge în git și în bundle-ul serverului
+    pass: process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS,
   },
   pool: true,
   maxConnections: 3,

@@ -130,3 +130,61 @@ model ScheduledMessage {
   status        String   @default("pending")
   createdAt     DateTime @default(now())
 }
+
+// ── AI Follow-Up & WhatsApp Automation ─────────────────────────────────────
+// Tabelele sunt create prin setup-db-followups.sql; modelele de mai jos
+// oglindesc schema pentru tooling (studio / introspect).
+
+model OrganizationSettings {
+  // Clerk orgId, sau "user:<clerkUserId>" când organizațiile nu sunt activate
+  org_id                  String   @id
+  api_key                 String   @unique
+
+  missed_call_sms_enabled Boolean  @default(false)
+  missed_call_sms_message String   @default("")
+
+  whatsapp_ai_enabled     Boolean  @default(false)
+  whatsapp_system_prompt  String   @default("")
+  human_takeover_minutes  Int      @default(3)
+
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
+
+  @@map("organization_settings")
+}
+
+model Conversation {
+  id                String   @id @default(uuid())
+  org_id            String
+  channel           String   @default("whatsapp")
+  contact_phone     String
+  wa_id             String?
+  contact_name      String?
+
+  taken_by_human    Boolean  @default(false)
+  taken_by_human_at DateTime?
+  taken_by_user_id  String?
+
+  last_message_at   DateTime @default(now())
+  created_at        DateTime @default(now())
+
+  messages          ConversationMessage[]
+
+  @@unique([org_id, channel, contact_phone])
+  @@index([org_id, last_message_at])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id              String       @id @default(uuid())
+  conversation_id String
+  conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  // 'user' = clientul, 'assistant' = AI, 'human' = operator uman din CRM
+  role            String
+  body            String
+  twilio_sid      String?
+  created_at      DateTime     @default(now())
+
+  @@index([conversation_id, created_at])
+  @@map("conversation_messages")
+}

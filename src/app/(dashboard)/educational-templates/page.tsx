@@ -1,10 +1,13 @@
 // src/app/(dashboard)/educational-templates/page.tsx
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import { Calendar, Clock, Send, Edit, Trash2, Mail, Smartphone, MessageCircle, Target, Plus } from 'lucide-react';
+import { Calendar, Clock, Send, Edit, Trash2, Mail, Smartphone, MessageCircle, Target, Plus, Inbox, Check, Search, Users } from 'lucide-react';
 import { formatWhatsAppLink } from '@/lib/utils';
+import { logWhatsAppSend } from '@/lib/sent-messages-client';
 import { Lead } from '@/services/leads/types';
 import AddClientModal from '@/components/AddClientModal';
+import { SentMessagesTable } from '@/components/messages/SentMessagesTable';
+import { LeadDetailDialog } from '@/components/leads/LeadDetailDialog';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +16,8 @@ interface Template {
   title: string;
   content: string;
   service: string | null;
+  // Tipul de caz în care se folosește șablonul; null = generic (vezi CASE_TYPES)
+  case_type: string | null;
   is_default: boolean;
   created_at: string;
   updated_at: string;
@@ -99,6 +104,17 @@ const TIME_FILTERS = [
   { value: 'all', label: 'Toate' }
 ];
 
+// Tipurile de caz în care se folosește un șablon. Valoarea goală = „Generic"
+// (se salvează ca NULL în `educational_templates.case_type`).
+// Nu au legătură cu `service` — acela rămâne serviciul oferit clientului.
+const CASE_TYPES = [
+  { value: '', label: 'Generic' },
+  { value: 'after_call', label: 'After call' },
+  { value: 'offer_request', label: 'Offer request' },
+  { value: 'follow_up', label: 'Follow Up' },
+  { value: 'cold_outreach', label: 'Cold outreach' }
+];
+
 export default function EducationalTemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [servicii, setServicii] = useState<string[]>([]);
@@ -109,14 +125,15 @@ export default function EducationalTemplatesPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendProgress, setSendProgress] = useState('');
-  const [activeTab, setActiveTab] = useState<'sending' | 'scheduled'>('sending');
+  const [activeTab, setActiveTab] = useState<'sending' | 'scheduled' | 'sent'>('sending');
   const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
 
   // Form state for template editing
   const [templateForm, setTemplateForm] = useState({
     title: '',
     content: '',
-    service: ''
+    service: '',
+    case_type: ''
   });
 
   // Filter state
@@ -125,9 +142,14 @@ export default function EducationalTemplatesPage() {
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [scheduledAt, setScheduledAt] = useState('');
   const [channel, setChannel] = useState<'email' | 'sms' | 'whatsapp'>('email');
+  // Tab-ul activ din „Opțiuni Trimitere" — una din valorile CASE_TYPES ('' = Generic)
+  const [caseTypeFilter, setCaseTypeFilter] = useState<string>('');
 
   // Lead filter/selection state
   const [leads, setLeads] = useState<Lead[]>([]);
+  // Fișa lead-ului (detalii + pitch + istoric), deschisă din lista de lead-uri
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
+  const [deletingLeadId, setDeletingLeadId] = useState<string | null>(null);
   const [leadNicheFilter, setLeadNicheFilter] = useState<string>('all');
   const [leadScoreFilter, setLeadScoreFilter] = useState<string>('all');
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
@@ -144,9 +166,34 @@ export default function EducationalTemplatesPage() {
     }
   };
 
+  async function handleDeleteLead(lead: Lead) {
+    // Ștergerea e definitivă și nu are „undo", deci cerem o confirmare explicită
+    const ok = window.confirm(
+      `Ștergi definitiv lead-ul „${lead.company_name}"?
+
+Dispar și notele lui din istoric. Acțiunea nu poate fi anulată.`
+    );
+    if (!ok) return;
+
+    setDeletingLeadId(lead.id);
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Eroare la ștergere');
+
+      setLeads((prev) => prev.filter((l) => l.id !== lead.id));
+      // Lead-ul șters nu mai poate rămâne selectat pentru trimitere
+      setSelectedLeadIds((prev) => prev.filter((id) => id !== lead.id));
+      if (editingLead?.id === lead.id) setEditingLead(null);
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+    } finally {
+      setDeletingLeadId(null);
+    }
+  }
+
   useEffect(() => {
+    // Clienții se încarcă din efectul pe filtre (mai jos), care rulează și la montare
     fetchTemplates();
-    fetchClients();
     fetchScheduledMessages();
     fetchLeads();
     fetch('/api/bookings?services=1')
@@ -178,6 +225,23 @@ export default function EducationalTemplatesPage() {
   useEffect(() => {
     setSelectedLeadIds([]);
   }, [channel]);
+
+  // Șabloanele afișate în „Opțiuni Trimitere", grupate după tipul de caz.
+  // Un case_type necunoscut (ex. rămas de la o versiune veche) cade pe „Generic",
+  // ca să nu existe șabloane fără niciun tab în care să apară.
+  const knownCaseTypes = CASE_TYPES.map((c) => c.value);
+  const caseTypeOf = (t: Template) =>
+    t.case_type && knownCaseTypes.includes(t.case_type) ? t.case_type : '';
+  const templatesForCaseType = (caseType: string) =>
+    templates.filter((t) => caseTypeOf(t) === caseType);
+  const visibleTemplates = templatesForCaseType(caseTypeFilter);
+
+  // Un șablon selectat dintr-un alt tip de caz ar rămâne activ, dar invizibil în listă
+  useEffect(() => {
+    if (isEditing) return;
+    setSelectedTemplate((prev) => (prev && caseTypeOf(prev) !== caseTypeFilter ? null : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseTypeFilter, isEditing]);
 
   const fetchTemplates = async () => {
     try {
@@ -243,7 +307,8 @@ export default function EducationalTemplatesPage() {
     setTemplateForm({
       title: template.title,
       content: template.content,
-      service: template.service || ''
+      service: template.service || '',
+      case_type: caseTypeOf(template)
     });
     setIsEditing(true);
   };
@@ -274,7 +339,7 @@ export default function EducationalTemplatesPage() {
       await fetchTemplates();
       setIsEditing(false);
       setSelectedTemplate(null);
-      setTemplateForm({ title: '', content: '', service: '' });
+      setTemplateForm({ title: '', content: '', service: '', case_type: '' });
     } catch (error) {
       console.error('Error saving template:', error);
       alert(`Eroare la salvarea șablonului: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -369,10 +434,32 @@ export default function EducationalTemplatesPage() {
     }
   };
 
-  const applyFilters = () => {
+  // ─── Wizard: Destinatari → Mesaj → Trimite ────────────────────────────────
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [audience, setAudience] = useState<'clients' | 'leads'>('clients');
+  const [recipientQuery, setRecipientQuery] = useState('');
+  const [sendMode, setSendMode] = useState<'now' | 'later'>('now');
+
+  // Filtrele se aplică imediat. Lista de clienți vine de pe server, iar o
+  // selecție făcută pe lista veche n-ar mai corespunde celei noi.
+  useEffect(() => {
     fetchClients();
     setSelectedClients([]);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceFilter, timeFilter]);
+
+  useEffect(() => {
+    setSelectedLeadIds([]);
+  }, [leadNicheFilter, leadScoreFilter]);
+
+  // WhatsApp se trimite manual, doar către lead-uri cu telefon
+  useEffect(() => {
+    if (channel === 'whatsapp') {
+      setAudience('leads');
+      setSelectedClients([]);
+      setSendMode('now');
+    }
+  }, [channel]);
 
   if (loading) {
     return (
@@ -385,561 +472,760 @@ export default function EducationalTemplatesPage() {
     );
   }
 
+  const CHANNELS = [
+    { value: 'email' as const, label: 'Email', hint: 'Trimis din CRM', icon: Mail },
+    { value: 'sms' as const, label: 'SMS', hint: 'Necesită Twilio', icon: Smartphone },
+    { value: 'whatsapp' as const, label: 'WhatsApp', hint: 'Manual, de pe telefon', icon: MessageCircle },
+  ];
+  const channelLabel = CHANNELS.find((c) => c.value === channel)?.label ?? 'Email';
+  const contactNoun = channel === 'email' ? 'email' : 'telefon';
+
+  const query = recipientQuery.trim().toLowerCase();
+  const matchesQuery = (...values: (string | null | undefined)[]) =>
+    !query || values.some((v) => v?.toLowerCase().includes(query));
+  const visibleClients = clients.filter((c) => matchesQuery(c.name, c.email));
+  const visibleLeads = nicheFilteredLeads.filter((l) =>
+    matchesQuery(l.company_name, l.contact_email, l.contact_phone)
+  );
+  const selectableVisibleLeads = visibleLeads.filter(hasContact);
+  const selectedLeads = leads.filter((l) => selectedLeadIds.includes(l.id));
+
+  const recipientCount = selectedClients.length + selectedLeadIds.length;
+  // Fără selecție explicită, un filtru de serviciu trimite către toți clienții lui
+  const hasRecipients = recipientCount > 0 || serviceFilter !== 'all';
+  const canReach = (n: 1 | 2 | 3) => n === 1 || (hasRecipients && (n === 2 || !!selectedTemplate));
+  const canContinue = step < 3 && canReach((step + 1) as 2 | 3);
+
+  const allClientsChecked =
+    visibleClients.length > 0 && visibleClients.every((c) => selectedClients.includes(c.email));
+  const allLeadsChecked =
+    selectableVisibleLeads.length > 0 && selectableVisibleLeads.every((l) => selectedLeadIds.includes(l.id));
+
+  const toggleAllVisible = () => {
+    if (audience === 'clients') {
+      const emails = visibleClients.map((c) => c.email);
+      setSelectedClients((prev) =>
+        allClientsChecked ? prev.filter((e) => !emails.includes(e)) : Array.from(new Set([...prev, ...emails]))
+      );
+    } else {
+      const ids = selectableVisibleLeads.map((l) => l.id);
+      setSelectedLeadIds((prev) =>
+        allLeadsChecked ? prev.filter((id) => !ids.includes(id)) : Array.from(new Set([...prev, ...ids]))
+      );
+    }
+  };
+
+  const previewName =
+    clients.find((c) => selectedClients.includes(c.email))?.name || selectedLeads[0]?.company_name || 'Client';
+  const previewHtml = selectedTemplate?.content.replace(/\{\{name\}\}/g, previewName) ?? '';
+
+  const whatsappMessage = (lead: Lead) =>
+    lead.pitch_generated ?? (selectedTemplate?.content.replace(/\{\{name\}\}/g, lead.company_name) ?? '');
+
+  const sendNowDisabled =
+    !selectedTemplate || (selectedClients.length === 0 && selectedLeadIds.length === 0 && serviceFilter === 'all') || sending;
+  // Programarea suportă deocamdată doar clienți, nu și lead-uri
+  const scheduleDisabled = !selectedTemplate || selectedClients.length === 0 || !scheduledAt || sending;
+
+  const recipientSummary = [
+    selectedClients.length > 0 && `${selectedClients.length} ${selectedClients.length === 1 ? 'client' : 'clienți'}`,
+    selectedLeadIds.length > 0 && `${selectedLeadIds.length} ${selectedLeadIds.length === 1 ? 'lead' : 'lead-uri'}`,
+  ].filter(Boolean).join(' · ') || (serviceFilter !== 'all' ? `Toți clienții „${serviceFilter}”` : 'Niciun destinatar');
+
+  const STEPS = [
+    { n: 1 as const, label: 'Destinatari', sub: recipientSummary },
+    { n: 2 as const, label: 'Mesaj', sub: selectedTemplate ? `${channelLabel} · ${selectedTemplate.title}` : 'Alege un șablon' },
+    { n: 3 as const, label: 'Trimite', sub: channel === 'whatsapp' ? 'Manual, câte un lead' : sendMode === 'now' ? 'Acum' : scheduledAt ? scheduledAt.replace('T', ' ') : 'Programat' },
+  ];
+
+  const segBtn = (active: boolean) =>
+    `rounded-full px-4 py-2 text-sm font-medium transition ${
+      active ? 'bg-stone-50 text-stone-950' : 'text-stone-400 hover:text-stone-200'
+    }`;
+  const pickCls = (active: boolean) =>
+    `border transition ${
+      active
+        ? 'bg-orange-500/15 border-orange-500 text-stone-100'
+        : 'bg-neutral-950 border-neutral-800 text-stone-100 hover:border-neutral-700'
+    }`;
+  const card = 'bg-neutral-900 border border-neutral-800 rounded-2xl';
+  const selectCls = 'bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-stone-100';
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-white">Șabloane Educaționale & Emailuri</h1>
+    /* `educational-templates` = hook pentru raza universală din globals.css */
+    <div className="educational-templates space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="page-title text-stone-100">Șabloane Educaționale &amp; Emailuri</h1>
+        <nav className="inline-flex gap-1 p-1 rounded-full border border-neutral-800">
+          {([
+            ['sending', 'Trimitere'],
+            ['scheduled', 'Programate'],
+            ['sent', 'Trimise'],
+          ] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setActiveTab(key)} className={segBtn(activeTab === key)}>
+              {label}
+            </button>
+          ))}
+        </nav>
       </div>
 
-      <div className="flex gap-6 h-full">
-        {/* Left Sidebar */}
-        <div className="w-80 space-y-4">
-          {/* Navigation */}
-          <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-4">
-            <nav className="space-y-2">
-              <button
-                onClick={() => setActiveTab('sending')}
-                className={`w-full text-left px-3 py-2 rounded-lg transition ${
-                  activeTab === 'sending'
-                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500'
-                    : 'text-white hover:bg-neutral-800'
-                }`}
-              >
-                Opțiuni Trimitere
-              </button>
-              <button
-                onClick={() => setActiveTab('scheduled')}
-                className={`w-full text-left px-3 py-2 rounded-lg transition ${
-                  activeTab === 'scheduled'
-                    ? 'bg-orange-500/20 text-orange-400 border border-orange-500'
-                    : 'text-white hover:bg-neutral-800'
-                }`}
-              >
-                Mesaje Programate
-              </button>
-            </nav>
-          </div>
-
-          {/* Client Selection Filter */}
-          <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-            <h2 className="text-white text-xl font-semibold flex items-center gap-2 mb-4">
-              <Send className="w-5 h-5" />
-              Selectează Clienți
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-white text-sm font-medium mb-2">Filtru Serviciu</label>
-                <select
-                  value={serviceFilter}
-                  onChange={(e) => setServiceFilter(e.target.value)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
-                >
-                  <option value="all">Toate serviciile</option>
-                  {servicii.map((service) => (
-                    <option key={service} value={service}>
-                      {service}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-white text-sm font-medium mb-2">Filtru Timp</label>
-                <select
-                  value={timeFilter}
-                  onChange={(e) => setTimeFilter(e.target.value)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
-                >
-                  {TIME_FILTERS.map((filter) => (
-                    <option key={filter.value} value={filter.value}>
-                      {filter.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={applyFilters}
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition"
-              >
-                Aplică Filtre
-              </button>
+      {activeTab === 'sending' && isEditing && (
+        /* Template Creation/Editing */
+        <div className={`${card} p-6 max-w-3xl`}>
+          <h2 className="font-serif text-2xl text-stone-100 mb-4">
+            {selectedTemplate && !selectedTemplate.is_default ? 'Editează șablon' : 'Șablon nou'}
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="title" className="block text-stone-300 text-sm font-medium mb-2">
+                Titlu / Subiect Email
+              </label>
+              <input
+                id="title"
+                type="text"
+                value={templateForm.title}
+                onChange={(e) => setTemplateForm({ ...templateForm, title: e.target.value })}
+                placeholder="ex: Follow-up după consultație"
+                className={`w-full ${selectCls} placeholder-stone-600`}
+              />
             </div>
-          </div>
-
-          {/* Lead Filter */}
-          <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-            <h2 className="text-white text-xl font-semibold flex items-center gap-2 mb-4">
-              <Target className="w-5 h-5" />
-              Selectează Lead-uri
-            </h2>
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-white text-sm font-medium mb-2">Filtru Nișă</label>
+                <label htmlFor="case_type" className="block text-stone-300 text-sm font-medium mb-2">Tip de caz</label>
                 <select
-                  value={leadNicheFilter}
-                  onChange={(e) => setLeadNicheFilter(e.target.value)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
+                  id="case_type"
+                  value={templateForm.case_type}
+                  onChange={(e) => setTemplateForm({ ...templateForm, case_type: e.target.value })}
+                  className={`w-full ${selectCls}`}
                 >
-                  <option value="all">Toate nișele</option>
-                  {leadNiches.map((niche) => (
-                    <option key={niche} value={niche}>
-                      {niche}
+                  {CASE_TYPES.map((caseType) => (
+                    <option key={caseType.value || '__generic__'} value={caseType.value}>
+                      {caseType.label}
                     </option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-white text-sm font-medium mb-2">Filtru Scor (calitate site)</label>
+                <label htmlFor="service" className="block text-stone-300 text-sm font-medium mb-2">Serviciu (opțional)</label>
                 <select
-                  value={leadScoreFilter}
-                  onChange={(e) => setLeadScoreFilter(e.target.value)}
-                  className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
+                  id="service"
+                  value={templateForm.service}
+                  onChange={(e) => setTemplateForm({ ...templateForm, service: e.target.value })}
+                  className={`w-full ${selectCls}`}
                 >
-                  <option value="all">Toate scorurile</option>
-                  <option value="low">Scor scăzut (&lt;40) — oportunitate mare</option>
-                  <option value="medium">Scor mediu (40-70)</option>
-                  <option value="high">Scor ridicat (&gt;70)</option>
+                  <option value="">Toate serviciile</option>
+                  {servicii.map((service) => (
+                    <option key={service} value={service}>{service}</option>
+                  ))}
                 </select>
               </div>
-              <p className="text-xs text-neutral-500">
-                {channel === 'sms' || channel === 'whatsapp'
-                  ? 'Se afișează doar lead-urile cu telefon completat.'
-                  : 'Se afișează doar lead-urile cu email completat.'}
-              </p>
+            </div>
+            <div>
+              <label htmlFor="content" className="block text-stone-300 text-sm font-medium mb-2">Conținut (HTML)</label>
+              <textarea
+                id="content"
+                value={templateForm.content}
+                onChange={(e) => setTemplateForm({ ...templateForm, content: e.target.value })}
+                rows={14}
+                className={`w-full ${selectCls} font-mono`}
+                placeholder="Folosește {{name}} pentru numele clientului"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <button
+                onClick={() => setIsEditing(false)}
+                className="rounded-full border border-neutral-700 px-5 py-2.5 text-sm text-stone-200 hover:bg-neutral-800 transition"
+              >
+                Renunță
+              </button>
+              <button
+                onClick={handleSaveTemplate}
+                disabled={sending}
+                className="rounded-full bg-orange-600 hover:bg-orange-700 text-white font-medium px-5 py-2.5 text-sm transition disabled:opacity-50"
+              >
+                {sending ? 'Se salvează...' : 'Salvează șablon'}
+              </button>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Right Main Area */}
-        <div className="flex-1">
-          {activeTab === 'sending' ? (
-            isEditing ? (
-              /* Template Creation/Editing */
-              <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-                <h2 className="text-white text-xl font-semibold mb-4">
-                  {selectedTemplate && !selectedTemplate.is_default ? 'Editează Șablon' : 'Creează Șablon Nou'}
-                </h2>
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="title" className="block text-white text-sm font-medium mb-2">
-                      Titlu / Subiect Email
-                    </label>
-                    <input
-                      id="title"
-                      type="text"
-                      value={templateForm.title}
-                      onChange={(e) => setTemplateForm({...templateForm, title: e.target.value})}
-                      placeholder="ex: Follow-up după consultație"
-                      className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white placeholder-neutral-500"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="service" className="block text-white text-sm font-medium mb-2">Serviciu (opțional)</label>
-                    <select
-                      value={templateForm.service}
-                      onChange={(e) => setTemplateForm({...templateForm, service: e.target.value})}
-                      className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
-                    >
-                      <option value="">Toate serviciile</option>
-                      {servicii.map((service) => (
-                        <option key={service} value={service}>
-                          {service}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label htmlFor="content" className="block text-white text-sm font-medium mb-2">Conținut (HTML)</label>
-                    <textarea
-                      id="content"
-                      value={templateForm.content}
-                      onChange={(e) => setTemplateForm({...templateForm, content: e.target.value})}
-                      rows={10}
-                      className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
-                      placeholder="Folosește {{name}} pentru numele clientului"
-                    />
-                  </div>
+      {activeTab === 'sending' && !isEditing && (
+        <div className="space-y-5">
+          {/* ── Pașii ─────────────────────────────────────────────── */}
+          <ol className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {STEPS.map((s) => {
+              const current = step === s.n;
+              const done = step > s.n;
+              return (
+                <li key={s.n}>
                   <button
-                    onClick={handleSaveTemplate}
-                    disabled={sending}
-                    className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition disabled:opacity-50"
+                    onClick={() => canReach(s.n) && setStep(s.n)}
+                    disabled={!canReach(s.n)}
+                    aria-current={current ? 'step' : undefined}
+                    className={`w-full flex items-center gap-3 text-left px-4 py-3.5 rounded-2xl bg-neutral-900 border transition disabled:cursor-not-allowed ${
+                      current ? 'border-orange-500' : 'border-neutral-800 hover:border-neutral-700'
+                    }`}
                   >
-                    {sending ? 'Se salvează...' : 'Salvează Șablon'}
+                    <span
+                      className={`shrink-0 w-7 h-7 rounded-full grid place-items-center font-mono text-xs ${
+                        current
+                          ? 'bg-orange-500 text-white'
+                          : done
+                            ? 'bg-stone-50 text-stone-950'
+                            : 'bg-neutral-800 text-stone-400'
+                      }`}
+                    >
+                      {done ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : s.n}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-stone-100">{s.label}</span>
+                      <span className="block text-xs text-stone-500 truncate">{s.sub}</span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+
+          {/* ── Pasul 1: Destinatari ──────────────────────────────── */}
+          {step === 1 && (
+            <div className={`${card} p-5 sm:p-6 space-y-5`}>
+              <div>
+                <p className="text-sm font-medium text-stone-400 mb-2">Canal de trimitere</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {CHANNELS.map(({ value, label, hint, icon: Icon }) => (
+                    <button
+                      key={value}
+                      onClick={() => setChannel(value)}
+                      className={`flex items-center gap-3 rounded-xl p-3 text-left ${pickCls(channel === value)}`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span>
+                        <span className="block text-sm font-semibold">{label}</span>
+                        <span className="block text-xs text-stone-500">{hint}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                {channel === 'sms' && (
+                  <p className="text-xs text-amber-400 mt-2">
+                    SMS necesită configurare Twilio în .env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
+                  </p>
+                )}
+                {channel === 'whatsapp' && (
+                  <p className="text-xs text-amber-400 mt-2">
+                    WhatsApp se trimite manual, de pe numărul tău personal — doar către lead-uri cu telefon completat.
+                  </p>
+                )}
+              </div>
+
+              <div className="h-px" />
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="inline-flex gap-1 p-1 rounded-full bg-neutral-950">
+                  <button
+                    onClick={() => setAudience('clients')}
+                    disabled={channel === 'whatsapp'}
+                    className={`${segBtn(audience === 'clients')} inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    <Users className="w-3.5 h-3.5" /> Clienți
+                    <span className="font-mono text-xs opacity-70">{clients.length}</span>
+                  </button>
+                  <button
+                    onClick={() => setAudience('leads')}
+                    className={`${segBtn(audience === 'leads')} inline-flex items-center gap-2`}
+                  >
+                    <Target className="w-3.5 h-3.5" /> Lead-uri
+                    <span className="font-mono text-xs opacity-70">{nicheFilteredLeads.length}</span>
                   </button>
                 </div>
+
+                <label className="flex-1 min-w-[200px] flex items-center gap-2 rounded-full bg-neutral-950 border border-neutral-800 px-4">
+                  <Search className="w-4 h-4 text-stone-500 shrink-0" />
+                  <input
+                    value={recipientQuery}
+                    onChange={(e) => setRecipientQuery(e.target.value)}
+                    placeholder="Caută după nume sau contact"
+                    aria-label="Caută destinatari"
+                    className="flex-1 min-w-0 bg-transparent border-0 py-2.5 text-sm text-stone-100 placeholder-stone-600 focus:outline-none"
+                  />
+                </label>
+
+                {audience === 'clients' ? (
+                  <>
+                    <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} aria-label="Filtru serviciu" className={selectCls}>
+                      <option value="all">Toate serviciile</option>
+                      {servicii.map((service) => (
+                        <option key={service} value={service}>{service}</option>
+                      ))}
+                    </select>
+                    <select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)} aria-label="Filtru timp" className={selectCls}>
+                      {TIME_FILTERS.map((filter) => (
+                        <option key={filter.value} value={filter.value}>{filter.label}</option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <select value={leadNicheFilter} onChange={(e) => setLeadNicheFilter(e.target.value)} aria-label="Filtru nișă" className={selectCls}>
+                      <option value="all">Toate nișele</option>
+                      {leadNiches.map((niche) => (
+                        <option key={niche} value={niche}>{niche}</option>
+                      ))}
+                    </select>
+                    <select value={leadScoreFilter} onChange={(e) => setLeadScoreFilter(e.target.value)} aria-label="Filtru scor" className={selectCls}>
+                      <option value="all">Toate scorurile</option>
+                      <option value="low">Scor sub 40 — oportunitate mare</option>
+                      <option value="medium">Scor 40–70</option>
+                      <option value="high">Scor peste 70</option>
+                    </select>
+                  </>
+                )}
+
+                <button
+                  onClick={() => setIsAddClientModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-4 py-2 transition"
+                >
+                  <Plus className="w-4 h-4" /> Add Client
+                </button>
               </div>
-            ) : (
-              /* Client List and Send Options */
-              <div className="space-y-4">
-                <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-                  <h2 className="text-white text-xl font-semibold mb-4 flex items-center justify-between">
-                    <span>Lista Clienți ({clients.length})</span>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setIsAddClientModalOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded-lg transition"
+
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                <label className="flex items-center gap-2.5 text-sm text-stone-400">
+                  <input
+                    type="checkbox"
+                    checked={audience === 'clients' ? allClientsChecked : allLeadsChecked}
+                    onChange={toggleAllVisible}
+                    className="w-4 h-4 accent-orange-500"
+                  />
+                  Selectează toți {audience === 'leads' ? 'contactabilii' : 'clienții'} afișați
+                </label>
+                <span className="font-mono text-xs text-stone-500">
+                  {audience === 'clients'
+                    ? `${visibleClients.length} afișați · ${selectedClients.length} selectați`
+                    : `${selectableVisibleLeads.length} din ${visibleLeads.length} au ${contactNoun} · ${selectedLeadIds.length} selectați`}
+                </span>
+              </div>
+
+              {audience === 'clients' ? (
+                visibleClients.length === 0 ? (
+                  <p className="text-sm text-stone-500 text-center py-8">Niciun client pentru filtrele curente.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5 max-h-[420px] overflow-y-auto content-start">
+                    {visibleClients.map((client) => {
+                      const checked = selectedClients.includes(client.email);
+                      return (
+                        <label
+                          key={client.email}
+                          className={`flex items-center gap-3 rounded-xl px-4 py-3 cursor-pointer ${pickCls(checked)}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setSelectedClients((prev) =>
+                                e.target.checked ? [...prev, client.email] : prev.filter((em) => em !== client.email)
+                              )
+                            }
+                            className="w-4 h-4 accent-orange-500 shrink-0"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium truncate">{client.name || 'Fără nume'}</span>
+                            <span className="block font-mono text-xs text-stone-500 truncate">{client.email}</span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )
+              ) : visibleLeads.length === 0 ? (
+                <p className="text-sm text-stone-500 text-center py-8">Niciun lead pentru filtrele curente.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5 max-h-[420px] overflow-y-auto content-start">
+                  {visibleLeads.map((lead) => {
+                    const contactable = hasContact(lead);
+                    const checked = selectedLeadIds.includes(lead.id);
+                    const contactValue = channel === 'email' ? lead.contact_email : lead.contact_phone;
+                    return (
+                      <div
+                        key={lead.id}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-3 ${pickCls(checked)} ${!contactable ? 'opacity-50' : ''}`}
                       >
-                        <Plus className="w-3.5 h-3.5" /> Add Client
-                      </button>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-white text-sm">Selectați toți</span>
                         <input
                           type="checkbox"
-                          checked={selectedClients.length === clients.length && clients.length > 0}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedClients(clients.map(c => c.email));
-                            } else {
-                              setSelectedClients([]);
-                            }
-                          }}
-                          className="w-4 h-4"
+                          checked={checked}
+                          disabled={!contactable}
+                          aria-label={`Selectează ${lead.company_name}`}
+                          title={!contactable ? `Fără ${contactNoun} completat` : undefined}
+                          onChange={(e) =>
+                            setSelectedLeadIds((prev) =>
+                              e.target.checked ? [...prev, lead.id] : prev.filter((id) => id !== lead.id)
+                            )
+                          }
+                          className="w-4 h-4 accent-orange-500 shrink-0 disabled:cursor-not-allowed"
                         />
-                      </div>
-                    </div>
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                    {clients.map((client) => (
-                      <div key={client.email} className="bg-neutral-800 border border-neutral-700 rounded-lg p-4">
-                        <div className="flex items-center space-x-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedClients.includes(client.email)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedClients([...selectedClients, client.email]);
-                              } else {
-                                setSelectedClients(selectedClients.filter(email => email !== client.email));
-                              }
-                            }}
-                            className="w-4 h-4"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm font-medium truncate">
-                              {client.name || 'Fără nume'}
-                            </p>
-                            <p className="text-gray-400 text-xs truncate">{client.email}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-white text-sm mt-4">
-                    Selectați: {selectedClients.length} clienți
-                  </div>
-                </div>
-
-                <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-                  <h2 className="text-white text-xl font-semibold mb-1 flex items-center justify-between">
-                    <span>Lista Lead-uri ({nicheFilteredLeads.length})</span>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setIsAddClientModalOpen(true)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium rounded-lg transition"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add Client
-                      </button>
-                      {channel !== 'whatsapp' && (
-                        <div className="flex items-center space-x-2">
-                          <span className="text-white text-sm">Selectați toți</span>
-                          <input
-                            type="checkbox"
-                            checked={selectedLeadIds.length === selectableLeads.length && selectableLeads.length > 0}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedLeadIds(selectableLeads.map(l => l.id));
-                              } else {
-                                setSelectedLeadIds([]);
-                              }
-                            }}
-                            className="w-4 h-4"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </h2>
-                  <p className="text-xs text-neutral-500 mb-4">
-                    {channel === 'whatsapp'
-                      ? `${selectableLeads.length} din ${nicheFilteredLeads.length} au telefon completat — apasă pe iconița WhatsApp pentru a deschide conversația.`
-                      : `${selectableLeads.length} din ${nicheFilteredLeads.length} au ${channel === 'sms' ? 'telefon' : 'email'} completat și pot fi selectate.`}
-                  </p>
-                  {nicheFilteredLeads.length === 0 ? (
-                    <p className="text-gray-400 text-sm">Niciun lead pentru filtrul curent.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                      {nicheFilteredLeads.map((lead) => {
-                        const contactable = hasContact(lead);
-                        const contactValue = channel === 'sms' || channel === 'whatsapp' ? lead.contact_phone : lead.contact_email;
-                        return (
-                          <div
-                            key={lead.id}
-                            className={`bg-neutral-800 border border-neutral-700 rounded-lg p-4 ${!contactable ? 'opacity-50' : ''}`}
-                          >
-                            <div className="flex items-center space-x-3">
-                              {channel === 'whatsapp' ? (
-                                <button
-                                  disabled={!contactable}
-                                  title={!contactable ? 'Fără telefon completat' : 'Deschide WhatsApp'}
-                                  onClick={() =>
-                                    window.open(
-                                      formatWhatsAppLink(
-                                        lead.contact_phone!,
-                                        lead.pitch_generated ??
-                                          (selectedTemplate?.content.replace(/\{\{name\}\}/g, lead.company_name) ?? '')
-                                      ),
-                                      '_blank'
-                                    )
-                                  }
-                                  className="shrink-0 disabled:opacity-30 disabled:cursor-not-allowed text-emerald-400 hover:text-emerald-300"
-                                >
-                                  <MessageCircle className="w-4 h-4" />
-                                </button>
-                              ) : (
-                                <input
-                                  type="checkbox"
-                                  checked={selectedLeadIds.includes(lead.id)}
-                                  disabled={!contactable}
-                                  title={!contactable ? `Fără ${channel === 'sms' ? 'telefon' : 'email'} completat` : undefined}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedLeadIds([...selectedLeadIds, lead.id]);
-                                    } else {
-                                      setSelectedLeadIds(selectedLeadIds.filter(id => id !== lead.id));
-                                    }
-                                  }}
-                                  className="w-4 h-4 disabled:cursor-not-allowed"
-                                />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <p className="text-white text-sm font-medium truncate">
-                                    {lead.company_name}
-                                  </p>
-                                  {lead.score !== null && (
-                                    <span
-                                      className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                        lead.score < 40
-                                          ? 'bg-red-500/15 text-red-400'
-                                          : lead.score <= 70
-                                          ? 'bg-yellow-500/15 text-yellow-400'
-                                          : 'bg-emerald-500/15 text-emerald-400'
-                                      }`}
-                                    >
-                                      {lead.score}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className={`text-xs truncate ${contactable ? 'text-gray-400' : 'text-neutral-600 italic'}`}>
-                                  {contactValue ?? `fără ${channel === 'sms' || channel === 'whatsapp' ? 'telefon' : 'email'}`}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {channel !== 'whatsapp' && (
-                    <div className="text-white text-sm mt-4">
-                      Selectați: {selectedLeadIds.length} lead-uri
-                    </div>
-                  )}
-                </div>
-
-                {/* Send Options */}
-                <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-                  <h2 className="text-white text-xl font-semibold mb-4">Opțiuni Trimitere</h2>
-                  <div className="space-y-4">
-                    {/* Channel selector */}
-                    <div>
-                      <label className="block text-white text-sm font-medium mb-2">Canal de trimitere</label>
-                      <div className="flex gap-2">
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-sm font-medium truncate">{lead.company_name}</span>
+                            {lead.score !== null && (
+                              <span
+                                className={`shrink-0 font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                  lead.score < 40
+                                    ? 'bg-red-500/15 text-red-400'
+                                    : lead.score <= 70
+                                      ? 'bg-yellow-500/15 text-yellow-400'
+                                      : 'bg-emerald-500/15 text-emerald-400'
+                                }`}
+                              >
+                                {lead.score}
+                              </span>
+                            )}
+                          </span>
+                          <span className={`block font-mono text-xs truncate ${contactable ? 'text-stone-500' : 'text-stone-600 italic'}`}>
+                            {contactValue ?? `fără ${contactNoun}`}
+                          </span>
+                        </span>
+                        {/* Editare fișă — util mai ales pentru lead-urile fără contact,
+                            care altfel nu pot fi selectate pentru trimitere */}
                         <button
-                          onClick={() => setChannel('email')}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-sm font-medium transition ${
-                            channel === 'email'
-                              ? 'bg-orange-500/20 border-orange-500 text-orange-400'
-                              : 'bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700'
-                          }`}
+                          onClick={() => setEditingLead(lead)}
+                          title="Editează detaliile lead-ului"
+                          aria-label={`Editează ${lead.company_name}`}
+                          className="shrink-0 text-stone-500 hover:text-stone-100 p-1"
                         >
-                          <Mail className="w-4 h-4" /> Email
+                          <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setChannel('sms')}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-sm font-medium transition ${
-                            channel === 'sms'
-                              ? 'bg-orange-500/20 border-orange-500 text-orange-400'
-                              : 'bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700'
-                          }`}
+                          onClick={() => handleDeleteLead(lead)}
+                          disabled={deletingLeadId === lead.id}
+                          title="Șterge lead-ul"
+                          aria-label={`Șterge ${lead.company_name}`}
+                          className="shrink-0 text-stone-500 hover:text-red-400 p-1 disabled:opacity-40"
                         >
-                          <Smartphone className="w-4 h-4" /> SMS
-                        </button>
-                        <button
-                          onClick={() => setChannel('whatsapp')}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-sm font-medium transition ${
-                            channel === 'whatsapp'
-                              ? 'bg-orange-500/20 border-orange-500 text-orange-400'
-                              : 'bg-neutral-800 border-neutral-700 text-white hover:bg-neutral-700'
-                          }`}
-                        >
-                          <MessageCircle className="w-4 h-4" /> WhatsApp
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      {channel === 'sms' && (
-                        <p className="text-xs text-amber-400 mt-2">
-                          SMS necesită configurare Twilio în .env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)
-                        </p>
-                      )}
-                      {channel === 'whatsapp' && (
-                        <p className="text-xs text-amber-400 mt-2">
-                          WhatsApp se trimite manual, de pe numărul tău personal — deschide câte o filă per lead din lista de mai sus.
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-white text-sm font-medium mb-2">Șabloane</label>
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {templates.map((template) => (
-                          <div
-                            key={template.id}
-                            className={`p-3 rounded-lg border cursor-pointer transition ${
-                              selectedTemplate?.id === template.id
-                                ? 'bg-orange-500/20 border-orange-500'
-                                : 'bg-neutral-800 border-neutral-700 hover:bg-neutral-700'
-                            }`}
-                            onClick={() => handleTemplateSelect(template)}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h4 className="text-white font-medium">{template.title}</h4>
-                                <p className="text-gray-400 text-sm">{template.service || 'Toate serviciile'}</p>
-                              </div>
-                              {!template.is_default && (
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEditTemplate(template);
-                                    }}
-                                    className="text-gray-400 hover:text-white p-1"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteTemplate(template);
-                                    }}
-                                    className="text-gray-400 hover:text-white p-1"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setSelectedTemplate(null);
-                          setTemplateForm({ title: '', content: DEFAULT_TEMPLATE_CONTENT, service: '' });
-                          setIsEditing(true);
-                        }}
-                        className="flex-1 bg-neutral-700 hover:bg-neutral-600 text-white font-medium py-2 px-4 rounded-lg transition"
-                      >
-                        Creează Șablon Nou
-                      </button>
-                    </div>
-
-                    {channel !== 'whatsapp' && (
-                      <>
-                        <div className="space-y-2">
-                          <label className="block text-white text-sm font-medium mb-2">Programează pentru mai târziu</label>
-                          <input
-                            type="datetime-local"
-                            value={scheduledAt}
-                            onChange={(e) => setScheduledAt(e.target.value)}
-                            className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-white"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <button
-                            onClick={() => handleSendMessage(true)}
-                            disabled={
-                              !selectedTemplate ||
-                              (selectedClients.length === 0 && selectedLeadIds.length === 0 && serviceFilter === 'all') ||
-                              sending
-                            }
-                            className="w-full bg-orange-600 hover:bg-orange-700 text-white font-medium py-2 px-4 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            <Send className="w-4 h-4" />
-                            Trimite Acum
-                          </button>
-
-                          <button
-                            onClick={() => handleSendMessage(false)}
-                            disabled={!selectedTemplate || selectedClients.length === 0 || !scheduledAt || sending}
-                            title="Programarea suportă doar clienți deocamdată, nu și lead-uri"
-                            className="w-full bg-neutral-700 hover:bg-neutral-600 text-white font-medium py-2 px-4 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
-                          >
-                            <Clock className="w-4 h-4" />
-                            Programează
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          ) : (
-            /* Scheduled Messages */
-            <div className="bg-neutral-900 rounded-lg border border-neutral-800 p-6">
-              <h2 className="text-white text-xl font-semibold flex items-center gap-2 mb-4">
-                <Calendar className="w-5 h-5" />
-                Mesaje Programate
-              </h2>
-              {scheduledMessages.length === 0 ? (
-                <p className="text-gray-400 text-sm">Niciun mesaj programat</p>
-              ) : (
-                <div className="space-y-2">
-                  {scheduledMessages.map((msg) => (
-                    <div key={msg.id} className="p-3 bg-neutral-800 rounded border border-neutral-700">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="text-white font-medium">{msg.template_title}</h4>
-                          <p className="text-gray-400 text-sm">
-                            {new Date(msg.scheduled_at).toLocaleString('ro-RO')}
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleCancelScheduled(msg.id)}
-                          className="text-gray-400 hover:text-white p-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
           )}
+
+          {/* ── Pasul 2: Mesaj ────────────────────────────────────── */}
+          {step === 2 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <div className={`${card} p-5 sm:p-6 space-y-5`}>
+                <div>
+                  <p className="text-sm font-medium text-stone-400 mb-2">Tip de caz</p>
+                  <div className="flex flex-wrap gap-2">
+                    {CASE_TYPES.map((caseType) => (
+                      <button
+                        key={caseType.value || '__generic__'}
+                        onClick={() => setCaseTypeFilter(caseType.value)}
+                        className={`rounded-full px-3 py-1.5 text-sm ${pickCls(caseTypeFilter === caseType.value)}`}
+                      >
+                        {caseType.label}{' '}
+                        <span className="font-mono text-xs text-stone-500">{templatesForCaseType(caseType.value).length}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-stone-400">Șablon</p>
+                    <button
+                      onClick={() => {
+                        setSelectedTemplate(null);
+                        // Preîncarcă tipul de caz al tab-ului activ ('' = Generic)
+                        setTemplateForm({
+                          title: '',
+                          content: DEFAULT_TEMPLATE_CONTENT,
+                          service: '',
+                          case_type: caseTypeFilter,
+                        });
+                        setIsEditing(true);
+                      }}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-orange-500 hover:text-orange-400"
+                    >
+                      <Plus className="w-4 h-4" /> Șablon nou
+                    </button>
+                  </div>
+                  <div className="space-y-2 max-h-[360px] overflow-y-auto">
+                    {visibleTemplates.length === 0 && (
+                      <p className="text-stone-500 text-sm py-2">
+                        Niciun șablon pentru acest tip de caz. Creează primul cu „Șablon nou”.
+                      </p>
+                    )}
+                    {visibleTemplates.map((template) => {
+                      const active = selectedTemplate?.id === template.id;
+                      return (
+                        <div
+                          key={template.id}
+                          className={`flex items-center gap-3 rounded-xl px-4 py-3 ${pickCls(active)}`}
+                        >
+                          <button onClick={() => handleTemplateSelect(template)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
+                            <span
+                              className={`shrink-0 w-4 h-4 rounded-full border-2 ${
+                                active ? 'border-orange-500 bg-orange-500 ring-2 ring-inset ring-neutral-950' : 'border-stone-600'
+                              }`}
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium truncate">{template.title}</span>
+                              <span className="block text-xs text-stone-500">{template.service || 'Toate serviciile'}</span>
+                            </span>
+                          </button>
+                          {!template.is_default && (
+                            <div className="flex gap-1 shrink-0">
+                              <button
+                                onClick={() => handleEditTemplate(template)}
+                                aria-label={`Editează ${template.title}`}
+                                className="text-stone-500 hover:text-stone-100 p-1"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTemplate(template)}
+                                aria-label={`Șterge ${template.title}`}
+                                className="text-stone-500 hover:text-red-400 p-1"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Previzualizare: HTML-ul real al șablonului, izolat într-un iframe fără scripturi */}
+              <div className={`${card} overflow-hidden`}>
+                <div className="px-5 py-3 border-b border-neutral-800 flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="font-mono text-[11px] uppercase tracking-widest text-stone-500">
+                    Previzualizare · {channelLabel}
+                  </span>
+                  <span className="text-xs text-stone-500">
+                    către <b className="font-semibold text-stone-200">{previewName}</b>
+                  </span>
+                </div>
+                {selectedTemplate ? (
+                  <iframe
+                    title="Previzualizare șablon"
+                    sandbox=""
+                    srcDoc={previewHtml}
+                    className="w-full h-[520px] bg-white"
+                  />
+                ) : (
+                  <p className="text-sm text-stone-500 text-center px-6 py-24">Alege un șablon ca să vezi mesajul.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Pasul 3: Trimite ──────────────────────────────────── */}
+          {step === 3 && (
+            <div className={`${card} p-5 sm:p-6 space-y-5 max-w-3xl`}>
+              <div>
+                <h2 className="font-serif text-3xl text-stone-100">Gata de trimis</h2>
+                <p className="text-sm text-stone-500">Verifică rezumatul, apoi trimite acum sau programează.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="rounded-xl bg-neutral-950 p-3.5">
+                  <p className="text-xs text-stone-500">Destinatari</p>
+                  <p className="font-serif text-3xl leading-tight text-stone-100">{recipientCount || '—'}</p>
+                  <p className="text-xs text-stone-500 truncate">{recipientSummary}</p>
+                </div>
+                <div className="rounded-xl bg-neutral-950 p-3.5">
+                  <p className="text-xs text-stone-500">Canal</p>
+                  <p className="text-sm font-semibold text-stone-100 mt-1">{channelLabel}</p>
+                </div>
+                <div className="rounded-xl bg-neutral-950 p-3.5">
+                  <p className="text-xs text-stone-500">Șablon</p>
+                  <p className="text-sm font-semibold text-stone-100 mt-1 truncate">{selectedTemplate?.title ?? '—'}</p>
+                </div>
+              </div>
+
+              {channel === 'whatsapp' ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-stone-400">
+                    Deschide conversația pentru fiecare lead. Se folosește pitch-ul generat al lead-ului, iar dacă lipsește, șablonul ales.
+                  </p>
+                  {selectedLeads.map((lead) => (
+                    <div key={lead.id} className="flex items-center gap-3 rounded-xl bg-neutral-950 border border-neutral-800 px-4 py-3">
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium text-stone-100 truncate">{lead.company_name}</span>
+                        <span className="block font-mono text-xs text-stone-500">{lead.contact_phone}</span>
+                      </span>
+                      <button
+                        onClick={() => {
+                          const message = whatsappMessage(lead);
+                          window.open(formatWhatsAppLink(lead.contact_phone!, message), '_blank');
+                          logWhatsAppSend(lead, message);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 transition"
+                      >
+                        <MessageCircle className="w-4 h-4" /> Deschide WhatsApp
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <div className="inline-flex gap-1 p-1 rounded-full bg-neutral-950">
+                    <button onClick={() => setSendMode('now')} className={segBtn(sendMode === 'now')}>Trimite acum</button>
+                    <button onClick={() => setSendMode('later')} className={segBtn(sendMode === 'later')}>Programează</button>
+                  </div>
+
+                  {sendMode === 'later' && (
+                    <div className="space-y-1.5">
+                      <label htmlFor="scheduled_at" className="block text-sm text-stone-400">Data și ora</label>
+                      <input
+                        id="scheduled_at"
+                        type="datetime-local"
+                        value={scheduledAt}
+                        onChange={(e) => setScheduledAt(e.target.value)}
+                        className={`${selectCls} min-w-[260px]`}
+                      />
+                      <p className="text-xs text-stone-500">Programarea suportă deocamdată doar clienți, nu și lead-uri.</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => handleSendMessage(sendMode === 'now')}
+                    disabled={sendMode === 'now' ? sendNowDisabled : scheduleDisabled}
+                    className="inline-flex items-center gap-2 rounded-full bg-orange-600 hover:bg-orange-700 text-white font-semibold px-6 py-3 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {sendMode === 'now' ? <Send className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                    {sending
+                      ? 'Se trimite...'
+                      : sendMode === 'now'
+                        ? `Trimite către ${recipientCount || 'filtru'}`
+                        : `Programează pentru ${selectedClients.length}`}
+                  </button>
+
+                  {sendProgress && (
+                    <p
+                      role="status"
+                      className={`text-sm ${sendProgress.startsWith('Eroare') ? 'text-red-400' : 'text-emerald-400'}`}
+                    >
+                      {sendProgress}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── Bara de navigare ──────────────────────────────────── */}
+          <div className="sticky bottom-0 z-10 -mx-6 lg:-mx-8 -mb-6 lg:-mb-8 px-6 lg:px-8 py-4 bg-neutral-950/90 backdrop-blur border-t border-neutral-800 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-stone-500 min-w-0 truncate">
+              <b className="font-semibold text-stone-100">{recipientSummary}</b>
+              {' · '}{channelLabel}{' · '}{selectedTemplate?.title ?? 'fără șablon'}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setStep((s) => (s > 1 ? ((s - 1) as 1 | 2) : s))}
+                disabled={step === 1}
+                className="rounded-full border border-neutral-700 px-5 py-2 text-sm text-stone-200 hover:bg-neutral-800 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Înapoi
+              </button>
+              {step < 3 && (
+                <button
+                  onClick={() => canContinue && setStep((s) => (s + 1) as 2 | 3)}
+                  disabled={!canContinue}
+                  className="rounded-full bg-stone-50 text-stone-950 px-5 py-2 text-sm font-semibold transition hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Continuă
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {activeTab === 'sent' && (
+        /* Sent Messages & Emails */
+        <div className={`${card} p-6`}>
+          <h2 className="font-serif text-2xl text-stone-100 flex items-center gap-2 mb-1">
+            <Inbox className="w-5 h-5" />
+            Mesaje &amp; Mail-uri Trimise
+          </h2>
+          <p className="text-xs text-stone-500 mb-4">
+            Toate email-urile, SMS-urile și mesajele WhatsApp trimise către clienți și lead-uri.
+            Apasă pe o linie pentru a vedea conținutul trimis.
+          </p>
+          <SentMessagesTable emptyMessage="Niciun mesaj trimis încă. Trimiterile apar aici imediat după ce pleacă." />
+        </div>
+      )}
+
+      {activeTab === 'scheduled' && (
+        /* Scheduled Messages */
+        <div className={`${card} p-6`}>
+          <h2 className="font-serif text-2xl text-stone-100 flex items-center gap-2 mb-4">
+            <Calendar className="w-5 h-5" />
+            Mesaje Programate
+          </h2>
+          {scheduledMessages.length === 0 ? (
+            <div className="py-10 text-center space-y-3">
+              <p className="text-stone-500 text-sm">Niciun mesaj programat.</p>
+              <button
+                onClick={() => {
+                  setActiveTab('sending');
+                  setSendMode('later');
+                }}
+                className="rounded-full bg-stone-50 text-stone-950 px-5 py-2 text-sm font-semibold hover:opacity-90"
+              >
+                Programează un mesaj
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {scheduledMessages.map((msg) => (
+                <div key={msg.id} className="flex items-center justify-between gap-3 rounded-xl bg-neutral-950 border border-neutral-800 px-4 py-3">
+                  <div>
+                    <h4 className="text-stone-100 font-medium">{msg.template_title}</h4>
+                    <p className="font-mono text-xs text-stone-500">
+                      {new Date(msg.scheduled_at).toLocaleString('ro-RO')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCancelScheduled(msg.id)}
+                    aria-label="Anulează mesajul programat"
+                    className="text-stone-500 hover:text-red-400 p-1"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <AddClientModal
         isOpen={isAddClientModalOpen}
         onClose={() => setIsAddClientModalOpen(false)}
         onCreated={() => { fetchClients(); fetchLeads(); }}
       />
+
+      {editingLead && (
+        <LeadDetailDialog
+          lead={editingLead}
+          initialTab="details"
+          onClose={() => setEditingLead(null)}
+          onUpdated={(updated) => {
+            // Actualizarea locală ține lista în sincron fără un refetch complet
+            setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+            setEditingLead(updated);
+          }}
+        />
+      )}
     </div>
   );
 }
