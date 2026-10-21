@@ -3,7 +3,25 @@ import { sql } from '@/lib/neon';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+/**
+ * Perioadele graficului „Activitate” (`?activity=`). Fiecare bară e o zi, o săptămână
+ * (luni–duminică) sau o lună calendaristică; ultima bară e cea curentă, încă în desfășurare.
+ */
+const ACTIVITY = {
+  '7d':  { unit: 'day',   step: '1 day',   span: '6 days'    },
+  '14d': { unit: 'day',   step: '1 day',   span: '13 days'   },
+  '30d': { unit: 'day',   step: '1 day',   span: '29 days'   },
+  '12w': { unit: 'week',  step: '1 week',  span: '11 weeks'  },
+  '12m': { unit: 'month', step: '1 month', span: '11 months' },
+} as const;
+
+type ActivityPeriod = keyof typeof ACTIVITY;
+
+export async function GET(request: Request) {
+  const param = new URL(request.url).searchParams.get('activity');
+  const activityPeriod: ActivityPeriod = param && param in ACTIVITY ? (param as ActivityPeriod) : '14d';
+  const act = ACTIVITY[activityPeriod];
+
   try {
     const [
       usersResult,
@@ -29,12 +47,13 @@ export async function GET() {
         FROM bookings
       `,
 
-      // Metrici ChatWidget
+      // Metrici ChatWidget — doar sesiunile în care userul a scris (widget-ul creează sesiuni goale la fiecare încărcare)
       sql`
         SELECT
           COUNT(*)                                                                       AS total,
           COUNT(*) FILTER (WHERE started_at >= date_trunc('month', NOW()))               AS this_month
-        FROM chat_sessions
+        FROM chat_sessions cs
+        WHERE EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = cs.session_id AND cm.role = 'user')
       `,
 
       // Trend zilnic — ultimele 30 zile
@@ -100,14 +119,24 @@ export async function GET() {
         ORDER BY g
       `.catch(() => []),
 
-      // Activitate pe ultimele 14 zile: bookings create vs. sesiuni de chat
+      // Activitate pe perioada aleasă: bookings create vs. sesiuni de chat, pe intervale
       sql`
+        WITH buckets AS (
+          SELECT g::date AS start, (g + ${act.step}::interval)::date AS stop
+          FROM generate_series(
+            date_trunc(${act.unit}, CURRENT_DATE::timestamp) - ${act.span}::interval,
+            date_trunc(${act.unit}, CURRENT_DATE::timestamp),
+            ${act.step}::interval
+          ) AS g
+        )
         SELECT
-          d::date::text AS date,
-          (SELECT COUNT(*) FROM bookings      WHERE created_at::date = d::date) AS bookings,
-          (SELECT COUNT(*) FROM chat_sessions WHERE started_at::date = d::date) AS chats
-        FROM generate_series(CURRENT_DATE - 13, CURRENT_DATE, INTERVAL '1 day') AS d
-        ORDER BY d
+          b.start::text AS date,
+          (SELECT COUNT(*) FROM bookings WHERE created_at >= b.start AND created_at < b.stop) AS bookings,
+          (SELECT COUNT(*) FROM chat_sessions cs
+            WHERE cs.started_at >= b.start AND cs.started_at < b.stop
+              AND EXISTS (SELECT 1 FROM chat_messages cm WHERE cm.session_id = cs.session_id AND cm.role = 'user')) AS chats
+        FROM buckets b
+        ORDER BY b.start
       `,
 
       // Programările de azi, în ordinea orei
@@ -148,6 +177,8 @@ export async function GET() {
         leadsTotal: Number(pt.leads_total ?? 0),
       },
       pitchedTrend: pitchedTrendResult.map(r => Number(r.cumulative)),
+      activityPeriod,
+      activityBucket: act.unit,
       activity: activityResult.map(r => ({
         date:     String(r.date),
         bookings: Number(r.bookings),

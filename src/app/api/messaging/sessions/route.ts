@@ -26,6 +26,9 @@ export async function GET() {
         cs.first_message,
         cs.started_at,
         cs.ended_at
+      -- Widget-ul de pe site deschide o sesiune „pending” la fiecare încărcare, chiar dacă
+      -- nimeni nu scrie; afișăm doar conversațiile în care userul a scris cel puțin un mesaj.
+      HAVING COUNT(cm.id) FILTER (WHERE cm.role = 'user') > 0
       ORDER BY cs.started_at DESC
     `;
 
