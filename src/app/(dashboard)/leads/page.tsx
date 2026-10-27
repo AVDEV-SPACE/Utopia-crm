@@ -23,6 +23,7 @@ const SOURCE_LABELS: Record<string, string> = {
   crm: 'Lead Generation',
   missed_call: 'Apel pierdut',
   website: 'Site',
+  engine: 'Motor leaduri',
 };
 
 interface Option {

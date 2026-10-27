@@ -43,7 +43,7 @@ export interface Lead {
   notes: string | null;
   /** Tenant-ul proprietar (Clerk orgId) — null pentru lead-urile vechi */
   org_id: string | null;
-  /** 'crm' | 'missed_call' | 'website' | 'sheet' */
+  /** 'crm' | 'missed_call' | 'website' | 'sheet' | 'engine' */
   source: string;
   // ── Câmpuri populate din spreadsheet (source='sheet') ──────────────────────
   /** Clasificare din sheet, ex. „1st Page” / „Fără website” */
@@ -58,6 +58,13 @@ export interface Lead {
   service_desired: string | null;
   /** Referință externă unică (ex. Twilio CallSid), pentru idempotență */
   source_ref: string | null;
+  // ── Pipeline de leaduri (source='engine') ───────────────────────────────────
+  /** Etapa detaliată din pipeline (QUEUED_EMAIL, CONTACTED...); `status` e maparea ei */
+  pipeline_stage: string | null;
+  /** Segmentul ICP (A / B / C) */
+  segment: string | null;
+  icp_match: boolean | null;
+  last_event_at: string | null;
   created_at: string;
   updated_at: string;
 }

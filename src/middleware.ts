@@ -16,6 +16,11 @@ const isPublicRoute = createRouteMatcher([
   // Matcher exact: sub-rutele (/api/leads/scan, /api/leads/[id]) rămân protejate,
   // iar GET-ul de listare își verifică sesiunea în handler.
   '/api/leads',
+  // Import generic în pipeline (CSV, unelte externe) — fiecare handler cere header-ul `x-api-key`
+  // (sau `Authorization: Bearer`) egal cu CRM_PIPELINE_API_KEY (lib/pipeline-auth).
+  // Matchere exacte: /api/pipeline/manage (folosit de UI) rămâne sub Clerk.
+  '/api/pipeline/leads',
+  '/api/pipeline/events',
 ]);
 
 const isAssistantRoute = createRouteMatcher(['/appointments(.*)']);
@@ -25,6 +30,7 @@ const isProtectedRoute = createRouteMatcher([
   '/appointments(.*)',
   '/settings(.*)',
   '/dashboard(.*)',
+  '/pipeline(.*)',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

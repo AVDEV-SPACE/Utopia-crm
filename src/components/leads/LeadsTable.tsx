@@ -66,6 +66,7 @@ const SOURCE_LABELS: Record<string, string> = {
   crm: 'Lead Generation',
   missed_call: 'Apel pierdut',
   website: 'Site',
+  engine: 'Motor leaduri',
 };
 
 const CHANNEL_META: Record<string, { label: string; icon: typeof Mail }> = {
