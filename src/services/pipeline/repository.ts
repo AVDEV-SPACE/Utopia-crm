@@ -242,11 +242,12 @@ async function insertEvent(leadId: string | null, input: PipelineEventInput, at:
 /**
  * Jurnalizează un eveniment de outreach și avansează etapa lead-ului potrivit.
  * Un eveniment nepotrivit se păstrează oricum (cu `lead_id` NULL), pentru audit.
+ * `leadId` sare peste potrivire, când apelantul (outreach) știe deja lead-ul.
  */
-export async function logPipelineEvent(input: PipelineEventInput): Promise<PipelineEventResult> {
+export async function logPipelineEvent(input: PipelineEventInput, leadId?: string): Promise<PipelineEventResult> {
   const at = input.occurredAt ?? new Date();
 
-  let lead = await findLeadForEvent(input.key, input.email);
+  let lead = leadId ? await getLeadById(leadId) : await findLeadForEvent(input.key, input.email);
   let previousStage: string | null = null;
   let stage: string | null = null;
 

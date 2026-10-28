@@ -80,12 +80,8 @@ CREATE INDEX IF NOT EXISTS idx_leads_org ON leads (org_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_leads_source_ref
   ON leads (source_ref) WHERE source_ref IS NOT NULL;
 
--- `status` primește stările noi produse de automatizări.
-ALTER TABLE leads DROP CONSTRAINT IF EXISTS leads_status_check;
-ALTER TABLE leads ADD CONSTRAINT leads_status_check CHECK (
-  status IN (
-    'new', 'scored', 'pitch_ready', 'sent', 'replied',
-    'negotiating', 'won', 'lost',
-    'MISSED_CALL', 'WEB_FORM'
-  )
-);
+-- `status` primește stările noi produse de automatizări. Coloana e de tip enum
+-- `lead_status`, deci valorile se adaugă în tip (un CHECK pe text ar eșua).
+-- Valorile noi nu pot fi folosite în aceeași tranzacție în care sunt adăugate.
+ALTER TYPE lead_status ADD VALUE IF NOT EXISTS 'MISSED_CALL';
+ALTER TYPE lead_status ADD VALUE IF NOT EXISTS 'WEB_FORM';

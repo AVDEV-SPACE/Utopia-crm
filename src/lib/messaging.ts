@@ -37,8 +37,24 @@ export function gmailSearchUrl(query: string): string {
   return `https://mail.google.com/mail/?authuser=${authuser}#search/${encodeURIComponent(query)}`;
 }
 
+export interface SendEmailOptions {
+  /** Varianta text simplu (outreach-ul o trimite alături de un HTML minimal) */
+  text?: string;
+  /** Nume afișat în „De la:” */
+  fromName?: string;
+  /** Message-ID-ul la care răspunde emailul — păstrează firul în clientul destinatarului */
+  inReplyTo?: string;
+  references?: string[];
+  headers?: Record<string, string>;
+}
+
 /** Trimite emailul și întoarce Message-ID-ul lui (cu `<>`), pentru jurnal. */
-export async function sendEmail(to: string, subject: string, html: string): Promise<string> {
+export async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  options: SendEmailOptions = {}
+): Promise<string> {
   const transporter = createTransporter();
   try {
     await transporter.verify();
@@ -47,10 +63,14 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   }
   const usesLogo = html.includes(`cid:${UTOPIA_LOGO_CID}`);
   const info = await transporter.sendMail({
-    from: FROM_EMAIL,
+    from: options.fromName ? { name: options.fromName, address: FROM_EMAIL } : FROM_EMAIL,
     to,
     subject,
     html,
+    text: options.text,
+    inReplyTo: options.inReplyTo,
+    references: options.references,
+    headers: options.headers,
     attachments: usesLogo
       ? [{
           filename: 'utopia-logo.png',
