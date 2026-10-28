@@ -21,6 +21,10 @@ const isPublicRoute = createRouteMatcher([
   // Matchere exacte: /api/pipeline/manage (folosit de UI) rămâne sub Clerk.
   '/api/pipeline/leads',
   '/api/pipeline/events',
+  // Joburi programate (GitHub Actions) — fiecare handler cere
+  // `Authorization: Bearer <CRON_SECRET>` (lib/cron-auth). Matchere exacte, câte unul pe job.
+  '/api/cron/lead-discover',
+  '/api/cron/lead-enrich',
 ]);
 
 const isAssistantRoute = createRouteMatcher(['/appointments(.*)']);

@@ -159,6 +159,23 @@ export function PipelineDetailSheet({ leadId, onClose, onUpdated }: PipelineDeta
                 <Signal label="Google Ads" on={details?.signals?.googleAds} />
                 <Signal label="Activ pe social" on={details?.signals?.activeOnSocial} />
                 <Signal label="ICP match" on={lead.icp_match ?? details?.icpMatch} />
+                {details?.signals?.hasActiveMetaAds !== undefined && (
+                  <Signal label="Reclame Meta active" on={details.signals.hasActiveMetaAds} />
+                )}
+                {details?.signals?.siteLoaded !== undefined && (
+                  <>
+                    <Signal label="Site încărcat" on={details.signals.siteLoaded} />
+                    {details.signals.siteLoaded && (
+                      <>
+                        <Signal label="Analytics" on={details.signals.gtag} />
+                        <Signal label="Programări online" on={details.signals.booking} />
+                        <Signal label="Chat" on={details.signals.chat} />
+                        <Signal label="Mobil (viewport)" on={details.signals.viewport} />
+                        <Signal label="HTTPS" on={details.signals.https} />
+                      </>
+                    )}
+                  </>
+                )}
               </div>
               <p className="text-xs text-stone-500">
                 Segment <span className="text-stone-200 font-semibold">{lead.segment ?? '—'}</span>

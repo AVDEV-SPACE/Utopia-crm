@@ -55,9 +55,10 @@ function LeadGenerationContent() {
 
   const fetchLeads = useCallback(async () => {
     try {
-      // Lead-urile importate din spreadsheet au pagina lor (/leads); aici rămân
+      // Lead-urile importate din spreadsheet au pagina lor (/leads), cele ale
+      // motorului și importurile CSV au /pipeline; aici rămân
       // doar cele produse de scanare și de automatizări.
-      const res = await fetch('/api/leads?excludeSource=sheet');
+      const res = await fetch('/api/leads?excludeSource=sheet,engine,linkedin');
       if (!res.ok) throw new Error('Nu am putut încărca lead-urile');
       setLeads(await res.json());
     } catch (err) {

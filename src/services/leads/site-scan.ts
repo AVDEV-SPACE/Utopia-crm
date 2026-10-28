@@ -16,7 +16,7 @@ const MAX_REDIRECTS = 5;
  * (SSRF): doar http(s), fără localhost, IP-uri private/link-local sau
  * domenii interne. Verificarea se repetă la fiecare redirect.
  */
-function isPublicHttpUrl(raw: string): boolean {
+export function isPublicHttpUrl(raw: string): boolean {
   let url: URL;
   try {
     url = new URL(raw);

@@ -67,6 +67,7 @@ const SOURCE_LABELS: Record<string, string> = {
   missed_call: 'Apel pierdut',
   website: 'Site',
   engine: 'Motor leaduri',
+  linkedin: 'Import CSV',
 };
 
 const CHANNEL_META: Record<string, { label: string; icon: typeof Mail }> = {

@@ -1,7 +1,7 @@
-import { timingSafeEqual } from 'crypto';
 import { auth } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveUserRole } from '@/lib/authorization';
+import { safeEqual } from '@/lib/secret';
 
 /**
  * Autentificarea rutelor de import ale pipeline-ului (/api/pipeline/leads,
@@ -46,12 +46,4 @@ export async function requirePipelineOwner(): Promise<{ userId: string } | NextR
   }
   if (role !== 'owner') return NextResponse.json({ error: 'Acces neautorizat' }, { status: 403 });
   return { userId };
-}
-
-/** Comparație în timp constant; lungimi diferite = nepotrivire. */
-function safeEqual(a: string, b: string): boolean {
-  const left = Buffer.from(a, 'utf8');
-  const right = Buffer.from(b, 'utf8');
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
 }

@@ -18,6 +18,9 @@ import type {
 /** Sursa cu care intră în `leads` tot ce trece prin pipeline (motorul de leaduri și importurile). */
 export const PIPELINE_SOURCE = 'engine';
 
+/** Sursele afișate în /pipeline: motorul + importurile CSV (export LinkedIn etc.). */
+export const PIPELINE_SOURCES = [PIPELINE_SOURCE, 'linkedin'];
+
 /**
  * De câte ori reîncercăm o scriere pierdută în fața unei alte scrieri
  * concurente pe același lead (vezi `upsertPipelineLead`).
@@ -190,7 +193,7 @@ async function findLeadForEvent(key: string | null, email: string | null): Promi
     const rows = await sql`
       SELECT * FROM leads
       WHERE lower(contact_email) = lower(${email})
-      ORDER BY (source = ${PIPELINE_SOURCE}) DESC, created_at DESC
+      ORDER BY (source = ANY(${PIPELINE_SOURCES}::text[])) DESC, created_at DESC
       LIMIT 1
     `;
     return (rows[0] as unknown as Lead) ?? null;
@@ -317,12 +320,12 @@ export async function listPipelineLeads(filters: PipelineFilters = {}): Promise<
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
   const offset = Math.max(filters.offset ?? 0, 0);
 
-  const params: unknown[] = [PIPELINE_SOURCE];
+  const params: unknown[] = [PIPELINE_SOURCES];
   const push = (value: unknown): string => {
     params.push(value);
     return `$${params.length}`;
   };
-  const where: string[] = ['source = $1'];
+  const where: string[] = ['source = ANY($1::text[])'];
 
   if (filters.stage) where.push(`pipeline_stage = ${push(filters.stage)}`);
   if (filters.segment) where.push(`segment = ${push(filters.segment)}`);
@@ -371,7 +374,7 @@ export async function listPipelineLeads(filters: PipelineFilters = {}): Promise<
         count(*) FILTER (WHERE pipeline_stage = 'CALL_BOOKED')::int            AS call_booked,
         count(*) FILTER (WHERE pipeline_stage = 'WON')::int                    AS won
       FROM leads
-      WHERE source = ${PIPELINE_SOURCE}
+      WHERE source = ANY(${PIPELINE_SOURCES}::text[])
     `,
     sql`
       SELECT
@@ -379,7 +382,7 @@ export async function listPipelineLeads(filters: PipelineFilters = {}): Promise<
         array_remove(array_agg(DISTINCT segment), NULL)        AS segments,
         array_remove(array_agg(DISTINCT pipeline_stage), NULL) AS stages
       FROM leads
-      WHERE source = ${PIPELINE_SOURCE}
+      WHERE source = ANY(${PIPELINE_SOURCES}::text[])
     `,
   ]);
 

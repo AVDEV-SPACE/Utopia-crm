@@ -13,7 +13,7 @@ export interface LeadFilters {
   q?: string;
   /** Păstrează doar lead-urile cu această sursă (ex. 'sheet'). */
   source?: string;
-  /** Exclude o sursă — folosit de /lead-generation ca să nu afișeze importurile. */
+  /** Exclude una sau mai multe surse (listă cu virgulă) — /lead-generation exclude importurile și motorul. */
   excludeSource?: string;
   niche?: string;
   location?: string;
@@ -59,7 +59,10 @@ export async function findLeads(filters: LeadFilters = {}): Promise<LeadPage> {
   };
 
   if (source) where.push(`source = ${push(source)}`);
-  if (excludeSource) where.push(`source <> ${push(excludeSource)}`);
+  if (excludeSource) {
+    const excluded = excludeSource.split(',').map((s) => s.trim()).filter(Boolean);
+    if (excluded.length > 0) where.push(`source <> ALL(${push(excluded)}::text[])`);
+  }
   if (niche) where.push(`niche = ${push(niche)}`);
   if (location) where.push(`location = ${push(location)}`);
   if (category) where.push(`category = ${push(category)}`);

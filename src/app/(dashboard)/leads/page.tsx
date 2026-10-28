@@ -24,6 +24,7 @@ const SOURCE_LABELS: Record<string, string> = {
   missed_call: 'Apel pierdut',
   website: 'Site',
   engine: 'Motor leaduri',
+  linkedin: 'Import CSV',
 };
 
 interface Option {

@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { CategoryFilter } from '@/components/leads/CategoryFilter';
 import { PipelineTable } from '@/components/pipeline/PipelineTable';
 import { PipelineDetailSheet } from '@/components/pipeline/PipelineDetailSheet';
+import { EnginePanel } from '@/components/pipeline/EnginePanel';
 import { Button } from '@/components/ui/button';
 import { STAGE_LABELS, PIPELINE_STAGES } from '@/services/pipeline/stages';
 import type { PipelineFacets, PipelineKpi, PipelineLeadRow } from '@/services/pipeline/types';
@@ -148,6 +149,8 @@ function PipelineContent() {
           Deschide un lead ca să vezi semnalele, auditul, mesajele generate și istoricul.
         </p>
       </div>
+
+      <EnginePanel onChanged={fetchLeads} />
 
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
         <KpiCard label="Total" value={kpi.total} />

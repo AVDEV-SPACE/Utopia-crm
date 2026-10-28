@@ -6,6 +6,18 @@ export interface PipelineSignals {
   googleAds?: boolean | null;
   activeOnSocial?: boolean | null;
   icpMatch?: boolean | null;
+  // ── Detectate de motor (src/services/engine/signals.ts) ────────────────────
+  /** Site-ul s-a încărcat (HTML > 500 caractere). Fără el nu afirmăm nimic despre site. */
+  siteLoaded?: boolean | null;
+  gtag?: boolean | null;
+  booking?: boolean | null;
+  chat?: boolean | null;
+  viewport?: boolean | null;
+  https?: boolean | null;
+  copyrightYear?: number | null;
+  /** Reclame active în Meta Ad Library (RO) */
+  hasActiveMetaAds?: boolean | null;
+  investsInMarketing?: boolean | null;
 }
 
 /**
@@ -18,12 +30,29 @@ export interface PipelineScoreDetails {
   icpMatch: boolean | null;
   signals: PipelineSignals | null;
   audit: { issues?: string[] } | null;
-  social: { instagram?: string | null; facebook?: string | null } | null;
+  social: { instagram?: string | null; facebook?: string | null; linkedin?: string | null } | null;
   linkedinDm: string | null;
   instagramDm: string | null;
   emailSource: string | null;
   /** Sursa din care a fost extrasă firma (ex. „openstreetmap") */
   source: string | null;
+  /** Prima frază a pitch-ului (motor), pornind de la un fapt verificat */
+  firstLine?: string | null;
+  /** Ce s-a aflat la descoperire, înainte de îmbogățire (motor) */
+  discovery?: EngineDiscovery | null;
+}
+
+/** Datele de descoperire ale unui lead din motor, păstrate în score_details. */
+export interface EngineDiscovery {
+  /** 'openstreetmap' | 'meta_ad_library' | 'google_places' | 'csv' */
+  source: string;
+  /** Id-ul în sursă (ex. „node/123", id-ul paginii Facebook, place id) */
+  externalId: string | null;
+  hasActiveMetaAds: boolean;
+  metaPageId: string | null;
+  facebook: string | null;
+  instagram: string | null;
+  linkedin: string | null;
 }
 
 /** Un lead din pipeline (motor sau import), după validare. */
