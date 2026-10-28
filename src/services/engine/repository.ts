@@ -165,16 +165,32 @@ function candidateKey(c: EngineCandidate): { key: string; domain: string | null 
   const domain = domainOf(website) ?? businessEmailDomain(c.email);
   if (domain) return { key: domain, domain };
 
-  const prefix: Record<string, string> = { openstreetmap: 'osm', meta_ad_library: 'meta', google_places: 'places', csv: 'csv' };
+  const prefix: Record<string, string> = {
+    openstreetmap: 'osm',
+    overture: 'ovt',
+    meta_ad_library: 'meta',
+    google_places: 'places',
+    csv: 'csv',
+  };
   const id = c.discovery.externalId ?? `${c.name}|${c.city ?? ''}`.toLowerCase();
   return { key: `${prefix[c.discovery.source] ?? c.discovery.source}:${id}`, domain: null };
 }
 
 /**
+ * Ultimele 9 cifre ale telefonului (07xx…, +40 7xx…, 0040… → aceeași cheie).
+ * Firmele fără site n-au domeniu, deci se deduplică după telefon.
+ */
+function phoneKey(phone: string | null): string | null {
+  const digits = (phone ?? '').replace(/[^0-9]/g, '');
+  return digits.length >= 9 ? digits.slice(-9) : null;
+}
+
+/**
  * Inserează candidații ca lead-uri SOURCED, fără duplicate:
- * - în lot: același domeniu apare o singură dată (lanțuri cu mai multe locații);
- * - față de DB: același `source_ref` sau același `domain` pe ORICE lead
- *   (inclusiv importurile din sheet) → sărit.
+ * - în lot: același domeniu sau același telefon apare o singură dată
+ *   (lanțuri cu mai multe locații, același loc mapat ca punct și ca clădire);
+ * - față de DB: același `source_ref`, `domain` sau telefon pe ORICE lead
+ *   (inclusiv importurile din sheet și clienții existenți) → sărit.
  * Un candidat din Meta Ad Library care se potrivește cu un lead existent încă
  * neprocesat îi marchează doar `hasActiveMetaAds` (îl face segment A).
  *
@@ -184,40 +200,54 @@ export async function insertCandidates(
   candidates: EngineCandidate[],
   options: { orgId: string; source: EngineLeadSource; limit: number }
 ): Promise<InsertCandidatesResult> {
-  const unique = new Map<string, { candidate: EngineCandidate; domain: string | null }>();
+  const unique = new Map<string, { candidate: EngineCandidate; domain: string | null; phone: string | null }>();
+  const keyByPhone = new Map<string, string>();
   let duplicates = 0;
 
   for (const candidate of candidates) {
     const { key, domain } = candidateKey(candidate);
-    const previous = unique.get(key);
+    const phone = phoneKey(candidate.phone);
+    const previous = unique.get(key) ?? (phone && keyByPhone.has(phone) ? unique.get(keyByPhone.get(phone) as string) : undefined);
     if (previous) {
       duplicates++;
       // Aceeași firmă găsită în două surse: păstrăm informația de reclame active
       if (candidate.discovery.hasActiveMetaAds) previous.candidate.discovery = { ...previous.candidate.discovery, hasActiveMetaAds: true, metaPageId: candidate.discovery.metaPageId, facebook: previous.candidate.discovery.facebook ?? candidate.discovery.facebook };
       continue;
     }
-    unique.set(key, { candidate, domain });
+    unique.set(key, { candidate, domain, phone });
+    if (phone) keyByPhone.set(phone, key);
   }
 
   const keys = [...unique.keys()];
   const domains = [...unique.values()].map((u) => u.domain).filter((d): d is string => Boolean(d));
+  const phones = [...keyByPhone.keys()];
   const existing = keys.length
     ? await sql`
-        SELECT id, source_ref, domain, pipeline_stage FROM leads
+        SELECT id, source_ref, domain, pipeline_stage,
+               right(regexp_replace(coalesce(contact_phone, ''), '[^0-9]', '', 'g'), 9) AS phone_key
+        FROM leads
         WHERE source_ref = ANY(${keys}::text[]) OR domain = ANY(${domains}::text[])
+           OR (contact_phone IS NOT NULL
+               AND right(regexp_replace(contact_phone, '[^0-9]', '', 'g'), 9) = ANY(${phones}::text[]))
       `
     : [];
-  const existingByKey = new Map<string, { id: string; pipeline_stage: string | null }>();
+  type ExistingLead = { id: string; pipeline_stage: string | null };
+  const existingByKey = new Map<string, ExistingLead>();
+  const existingByPhone = new Map<string, ExistingLead>();
   for (const row of existing) {
-    if (row.source_ref) existingByKey.set(row.source_ref as string, row as { id: string; pipeline_stage: string | null });
-    if (row.domain) existingByKey.set(row.domain as string, row as { id: string; pipeline_stage: string | null });
+    if (row.source_ref) existingByKey.set(row.source_ref as string, row as ExistingLead);
+    if (row.domain) existingByKey.set(row.domain as string, row as ExistingLead);
+    if (row.phone_key && phones.includes(row.phone_key as string)) existingByPhone.set(row.phone_key as string, row as ExistingLead);
   }
 
   let inserted = 0;
   let overCap = 0;
 
-  for (const [key, { candidate, domain }] of unique) {
-    const match = existingByKey.get(key) ?? (domain ? existingByKey.get(domain) : undefined);
+  for (const [key, { candidate, domain, phone }] of unique) {
+    const match =
+      existingByKey.get(key) ??
+      (domain ? existingByKey.get(domain) : undefined) ??
+      (phone ? existingByPhone.get(phone) : undefined);
     if (match) {
       duplicates++;
       if (candidate.discovery.hasActiveMetaAds && match.pipeline_stage === 'SOURCED') {

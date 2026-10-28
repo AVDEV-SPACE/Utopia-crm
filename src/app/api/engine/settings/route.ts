@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePipelineOwner } from '@/lib/pipeline-auth';
-import { resolveNicheTags } from '@/services/leads/osm-categories';
+import { resolveNiche } from '@/services/engine/osm';
 import {
   getEngineSettings,
   getEngineStats,
@@ -10,6 +10,7 @@ import {
 } from '@/services/engine/repository';
 import { isMetaAdLibraryEnabled } from '@/services/engine/meta-adlib';
 import { isGooglePlacesEnabled } from '@/services/engine/google-places';
+import { isOvertureEnabled } from '@/services/engine/overture';
 import { groqModel } from '@/services/engine/groq';
 
 export const runtime = 'nodejs';
@@ -33,6 +34,7 @@ export async function GET() {
           osm: true,
           metaAdLibrary: isMetaAdLibraryEnabled(),
           googlePlaces: isGooglePlacesEnabled(),
+          overture: isOvertureEnabled(),
         },
         model: groqModel(),
       },
@@ -70,11 +72,12 @@ export async function PUT(req: NextRequest) {
     );
   }
 
-  // O nișă fără tag-uri OSM ar face fiecare rulare pe ea să eșueze
-  const unknown = (parsed.data.niches ?? []).filter((n) => !resolveNicheTags(n));
-  if (unknown.length > 0) {
+  // Orice nișă se poate căuta (dicționar, tag OSM sau după nume); doar textul
+  // prea scurt ar face fiecare rulare pe ea să eșueze
+  const unusable = (parsed.data.niches ?? []).filter((n) => !resolveNiche(n));
+  if (unusable.length > 0) {
     return NextResponse.json(
-      { error: `Nișe fără corespondent OSM: ${unknown.join(', ')}`, details: unknown },
+      { error: `Nișe prea scurte pentru căutare (minim 3 litere): ${unusable.join(', ')}`, details: unusable },
       { status: 400 }
     );
   }

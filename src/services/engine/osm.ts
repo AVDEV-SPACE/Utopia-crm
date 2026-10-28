@@ -1,11 +1,11 @@
-import { resolveNicheTags, type OsmTag } from '@/services/leads/osm-categories';
+import { normalizeNiche, resolveNicheTags, type OsmTag } from '@/services/leads/osm-categories';
 import { osmUserAgent, sleep } from './http';
 import { normalizeEmail, normalizeWebsite } from './normalize';
 import type { EngineCandidate } from './types';
 
 /**
  * Descoperire prin OpenStreetMap: Nominatim găsește granița orașului, Overpass
- * caută în ea firmele cu tag-ul nișei care au nume și site sau email.
+ * caută în ea firmele nișei care au nume și un contact (site, email sau telefon).
  *
  * Politica instanțelor publice Overpass: ~10.000 cereri/zi, 429 la rate limit,
  * 504 la lipsă de resurse. Facem o singură interogare mică pe rulare
@@ -30,11 +30,13 @@ interface OverpassElement {
   tags?: Record<string, string>;
 }
 
-interface CityLocation {
+export interface CityLocation {
   /** Id-ul de area Overpass (3600000000 + id-ul relației), dacă orașul are graniță */
   areaId: number | null;
   lat: number;
   lon: number;
+  /** Dreptunghiul localității (sau ~10 km în jurul centrului, fără graniță) */
+  bbox: { south: number; north: number; west: number; east: number };
 }
 
 const cityCache = new Map<string, CityLocation>();
@@ -60,15 +62,28 @@ export async function locateCity(city: string): Promise<CityLocation> {
   const cached = cityCache.get(city.toLowerCase());
   if (cached) return cached;
 
-  const results = await nominatim({ city, limit: '5' });
-  if (results.length === 0) throw new Error(`Nominatim nu a găsit orașul „${city}”`);
+  let results = await nominatim({ city, limit: '5' });
+  // Comunele și localitățile mici nu apar mereu ca `city`: căutare liberă
+  if (results.length === 0) {
+    await sleep(1_100); // Nominatim: max 1 cerere/secundă
+    results = await nominatim({ q: city, limit: '5' });
+  }
+  if (results.length === 0) throw new Error(`Nominatim nu a găsit localitatea „${city}”`);
 
   const relation = results.find((r) => r.osm_type === 'relation');
   const first = relation ?? results[0];
+  const lat = Number(first.lat);
+  const lon = Number(first.lon);
+  // Nominatim: boundingbox = [sud, nord, vest, est]
+  const box = relation && Array.isArray(relation.boundingbox) ? (relation.boundingbox as string[]).map(Number) : null;
   const location: CityLocation = {
     areaId: relation ? 3_600_000_000 + Number(relation.osm_id) : null,
-    lat: Number(first.lat),
-    lon: Number(first.lon),
+    lat,
+    lon,
+    bbox:
+      box && box.length === 4 && box.every(Number.isFinite)
+        ? { south: box[0], north: box[1], west: box[2], east: box[3] }
+        : { south: lat - 0.09, north: lat + 0.09, west: lon - 0.13, east: lon + 0.13 },
   };
   cityCache.set(city.toLowerCase(), location);
   return location;
@@ -85,14 +100,69 @@ export async function findWebsiteByName(name: string, city: string): Promise<str
   return null;
 }
 
-function buildQuery(tags: OsmTag[], location: CityLocation): string {
+/**
+ * Cum se caută o nișă în OSM — reuniunea celor două criterii:
+ * - `tags`: tag-uri OSM, din dicționar sau scrise direct (ex. `amenity=veterinary`);
+ * - `pattern`: căutare după nume printre locurile care sunt afaceri (au
+ *   amenity/shop/office/...). Prinde și firmele etichetate greșit sau
+ *   incomplet (ex. „Cabinet Veterinar X” pus ca magazin de animale).
+ * Un tag scris direct caută doar tag-ul.
+ */
+export interface NicheMatch {
+  tags: OsmTag[];
+  pattern: string | null;
+}
+
+/** Tag OSM scris direct: `cheie=valoare`, doar caractere sigure în interogare. */
+const EXPLICIT_TAG = /^([a-z_:]+)=([a-z0-9_]+)$/;
+
+/** Cheile care marchează un loc ca afacere, la căutarea după nume. */
+const BUSINESS_KEYS = ['amenity', 'shop', 'office', 'craft', 'healthcare', 'tourism', 'leisure'];
+
+/** Oricare dintre aceste chei = firma are un contact (site, email, telefon sau social). */
+const CONTACT_FILTER =
+  '[~"^(website|contact:website|email|contact:email|phone|contact:phone|contact:mobile|contact:facebook|contact:instagram|facebook|instagram)$"~"."]';
+
+/**
+ * Litera fără diacritice → toate variantele ei. Alternanțe, nu clase: în
+ * clasele POSIX caracterele pe mai mulți octeți nu se potrivesc sigur, iar
+ * `,i` nu acoperă majusculele cu diacritice.
+ */
+const DIACRITICS: Record<string, string> = {
+  a: '(a|ă|â|A|Ă|Â)',
+  i: '(i|î|I|Î)',
+  s: '(s|ș|ş|S|Ș|Ş)',
+  t: '(t|ț|ţ|T|Ț|Ţ)',
+};
+
+/** Traduce nișa în criteriul de căutare; `null` = text prea scurt ca să caute ceva util. */
+export function resolveNiche(niche: string): NicheMatch | null {
+  const explicit = EXPLICIT_TAG.exec(niche.trim().toLowerCase());
+  if (explicit) return { tags: [{ key: explicit[1], value: explicit[2] }], pattern: null };
+
+  const tags = resolveNicheTags(niche) ?? [];
+  // Doar litere, cifre și spații ajung în regex — nimic nu poate ieși din ghilimele
+  const words = normalizeNiche(niche).replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const pattern =
+    words.join('').length >= 3
+      ? words.map((w) => [...w].map((ch) => DIACRITICS[ch] ?? ch).join('')).join('[ -]+')
+      : null;
+
+  if (tags.length === 0 && !pattern) return null;
+  return { tags, pattern };
+}
+
+function buildQuery(match: NicheMatch, location: CityLocation): string {
   const scope = location.areaId ? '(area.a)' : `(around:10000,${location.lat},${location.lon})`;
-  const contactKeys = ['website', 'contact:website', 'email', 'contact:email'];
-  const clauses = tags
-    .flatMap((t) => contactKeys.map((k) => `nwr["${t.key}"="${t.value}"]["name"]["${k}"]${scope};`))
-    .join('');
+  const clauses = [
+    ...match.tags.map((t) => `nwr["${t.key}"="${t.value}"]["name"]${CONTACT_FILTER}${scope};`),
+    ...(match.pattern
+      ? BUSINESS_KEYS.map((k) => `nwr["${k}"]["name"~"${match.pattern}",i]${CONTACT_FILTER}${scope};`)
+      : []),
+  ];
   const area = location.areaId ? `area(id:${location.areaId})->.a;` : '';
-  return `[out:json][timeout:50];${area}(${clauses});out center tags 100;`;
+  // `out` fără număr: toate rezultatele, fără plafon
+  return `[out:json][timeout:90];${area}(${clauses.join('')});out center tags;`;
 }
 
 /**
@@ -142,16 +212,17 @@ async function runOverpass(query: string, deadline: number): Promise<OverpassEle
   throw new Error(`Overpass indisponibil: ${failures.join('; ')}`);
 }
 
-/** Firmele unei nișe dintr-un oraș, cu nume și (site sau email). */
+/** Firmele unei nișe dintr-un oraș, cu nume și un contact (site, email sau telefon). */
 export async function discoverOsm(niche: string, city: string, deadline: number): Promise<EngineCandidate[]> {
-  const tags = resolveNicheTags(niche);
-  if (!tags) throw new Error(`Nișa „${niche}” nu are tag-uri OSM (src/services/leads/osm-categories.ts)`);
+  const match = resolveNiche(niche);
+  if (!match) throw new Error(`Nișa „${niche}” e prea scurtă pentru căutare (minim 3 litere)`);
 
   const location = await locateCity(city);
-  const elements = await runOverpass(buildQuery(tags, location), deadline);
+  const elements = await runOverpass(buildQuery(match, location), deadline);
 
   return elements
-    .filter((el) => el.tags?.name)
+    // Lanțurile naționale (au brand) nu sunt firme locale
+    .filter((el) => el.tags?.name && !el.tags.brand && !el.tags['brand:wikidata'])
     .map((el) => {
       const t = el.tags as Record<string, string>;
       const street = [t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' ');
@@ -168,8 +239,8 @@ export async function discoverOsm(niche: string, city: string, deadline: number)
           externalId: `${el.type}/${el.id}`,
           hasActiveMetaAds: false,
           metaPageId: null,
-          facebook: t['contact:facebook'] ?? null,
-          instagram: t['contact:instagram'] ?? null,
+          facebook: t['contact:facebook'] ?? t.facebook ?? null,
+          instagram: t['contact:instagram'] ?? t.instagram ?? null,
           linkedin: t['contact:linkedin'] ?? null,
         },
       } satisfies EngineCandidate;

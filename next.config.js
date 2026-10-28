@@ -6,6 +6,12 @@ const nextConfig = {
   // Nesetat în producție → rămâne `.next`.
   distDir: process.env.NEXT_DIST_DIR || '.next',
 
+  // DuckDB (sursa Overture din motorul de leaduri) are un binar nativ per
+  // platformă: se încarcă din node_modules la runtime, nu se împachetează.
+  experimental: {
+    serverComponentsExternalPackages: ['@duckdb/node-api', '@duckdb/node-bindings'],
+  },
+
   // Antete de securitate pe toate rutele. Fără CSP strict: Clerk, GA și
   // stilurile inline ale aplicației ar cere o listă lungă de excepții.
   async headers() {

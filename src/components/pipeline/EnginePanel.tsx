@@ -5,12 +5,14 @@ import { toast } from 'sonner';
 import { ChevronDown, Cpu, Loader2, Play, Sparkles, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { EngineRun, EngineSettings, EngineStats } from '@/services/engine/types';
+import { KNOWN_NICHES } from '@/services/leads/osm-categories';
+import { RO_CITIES } from '@/services/leads/ro-cities';
 
 interface EngineState {
   settings: EngineSettings;
   stats: EngineStats;
   runs: EngineRun[];
-  sources: { osm: boolean; metaAdLibrary: boolean; googlePlaces: boolean };
+  sources: { osm: boolean; overture: boolean; metaAdLibrary: boolean; googlePlaces: boolean };
   model: string;
 }
 
@@ -39,6 +41,9 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
   const [maxNew, setMaxNew] = useState('');
   const [batch, setBatch] = useState('8');
   const [minScore, setMinScore] = useState('50');
+  // Perechea pentru o rulare discover manuală; ambele goale = rotația din setări
+  const [targetNiche, setTargetNiche] = useState('');
+  const [targetCity, setTargetCity] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -62,12 +67,19 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
   }, [load]);
 
   async function run(kind: 'discover' | 'enrich') {
+    const niche = targetNiche.trim();
+    const city = targetCity.trim();
+    if (kind === 'discover' && Boolean(niche) !== Boolean(city)) {
+      toast.error('Completează și nișa, și orașul — sau lasă-le goale pentru rotația din setări');
+      return;
+    }
+
     setRunning(kind);
     try {
       const res = await fetch('/api/engine/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind }),
+        body: JSON.stringify(kind === 'discover' && niche ? { kind, niche, city } : { kind }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Rularea a eșuat');
@@ -156,6 +168,34 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
           </div>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          <input
+            value={targetNiche}
+            onChange={(e) => setTargetNiche(e.target.value)}
+            list="engine-niches"
+            placeholder="Nișă (gol = rotație)"
+            aria-label="Nișă pentru discover"
+            maxLength={80}
+            className={`${inputClass} !w-44 !py-1.5 text-xs`}
+          />
+          <input
+            value={targetCity}
+            onChange={(e) => setTargetCity(e.target.value)}
+            list="engine-cities"
+            placeholder="Oraș"
+            aria-label="Oraș pentru discover"
+            maxLength={80}
+            className={`${inputClass} !w-36 !py-1.5 text-xs`}
+          />
+          <datalist id="engine-niches">
+            {[...new Set([...(state?.settings.niches ?? []), ...KNOWN_NICHES])].map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+          <datalist id="engine-cities">
+            {[...new Set([...(state?.settings.cities ?? []), ...RO_CITIES])].map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
           <Button size="sm" variant="outline" disabled={running !== null} onClick={() => run('discover')}>
             {running === 'discover' ? <Loader2 className="animate-spin" /> : <Play />}
             Rulează discover
@@ -174,10 +214,13 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
       {open && state && (
         <div className="border-t border-stone-800/60 p-4 space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Nișe (una pe rând)">
+            <Field
+              label="Nișe pentru rotația automată (una pe rând)"
+              hint="Orice nișă: din listă, un tag OSM (ex. amenity=veterinary) sau text liber, căutat în numele firmelor"
+            >
               <textarea value={niches} onChange={(e) => setNiches(e.target.value)} rows={6} className={inputClass} />
             </Field>
-            <Field label="Orașe (unul pe rând)">
+            <Field label="Orașe pentru rotația automată (unul pe rând)" hint="Orice localitate din România">
               <textarea value={cities} onChange={(e) => setCities(e.target.value)} rows={6} className={inputClass} />
             </Field>
           </div>
@@ -210,7 +253,7 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
               Import CSV (LinkedIn etc.)
             </Button>
             <span className="text-[11px] text-stone-600">
-              Surse: OSM{state.sources.metaAdLibrary ? ' · Meta Ad Library' : ''}
+              Surse: {state.sources.overture ? 'Overture · ' : ''}OSM{state.sources.metaAdLibrary ? ' · Meta Ad Library' : ''}
               {state.sources.googlePlaces ? ' · Google Places' : ''} · model {state.model}
             </span>
           </div>

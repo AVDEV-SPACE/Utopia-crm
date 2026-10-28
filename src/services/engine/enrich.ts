@@ -4,7 +4,7 @@ import { fetchPage, type FetchedPage } from './http';
 import { isMetaAdLibraryEnabled } from './meta-adlib';
 import { isSocialUrl } from './normalize';
 import { auditIssues, extractSiteFacts, MIN_HTML_LENGTH, type SiteFacts } from './signals';
-import { scoreLead, type LeadPitch, type ScoreFacts } from './score';
+import { NON_ICP_MAX_SCORE, scoreLead, type LeadPitch, type ScoreFacts } from './score';
 import type { EnrichmentUpdate } from './repository';
 
 /** Paginile încercate după homepage, când acesta nu are email. */
@@ -102,6 +102,13 @@ export async function enrichLead(
   // Fără niciun canal de contact nu cheltuim tokeni pe un pitch care nu poate pleca
   if (!email && !instagram && !lead.contact_phone) {
     return { ...base, stage: 'DISQUALIFIED_NO_CONTACT', score: null, pitchSubject: null, pitchBody: null, aiFailed: false };
+  }
+
+  // Filtrul ICP fără AI: în afara ICP scorul e plafonat la 40 (score.ts), deci
+  // sub pragul minim ar ieși oricum DISQUALIFIED — nu mai cheltuim tokeni pe el
+  if (!icpMatch && options.minScore > NON_ICP_MAX_SCORE) {
+    details.reason = 'Nu are semnale de reclame (pixel Meta, Google Ads, reclame active) și nici profil social — filtrat fără AI';
+    return { ...base, stage: 'DISQUALIFIED', score: null, pitchSubject: null, pitchBody: null, aiFailed: false };
   }
 
   const scoreFacts: ScoreFacts = {

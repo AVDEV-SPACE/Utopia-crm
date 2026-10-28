@@ -1,6 +1,7 @@
 import { discoverOsm } from './osm';
 import { discoverMetaAds, isMetaAdLibraryEnabled } from './meta-adlib';
 import { discoverGooglePlaces, isGooglePlacesEnabled } from './google-places';
+import { discoverOverture, isOvertureEnabled, OVERTURE_MIN_TIME_MS } from './overture';
 import { enrichLead, snapshotSite, type SiteSnapshot } from './enrich';
 import { mapLimit } from './http';
 import {
@@ -34,8 +35,14 @@ export function engineOrgId(): string {
   return orgId;
 }
 
-/** O rulare de descoperire: o singură pereche nișă × oraș. */
-export async function runDiscover(trigger: 'cron' | 'manual'): Promise<DiscoverResult> {
+/**
+ * O rulare de descoperire: o singură pereche nișă × oraș — cea aleasă în UI
+ * (`target`) sau, fără ea, următoarea din rotația din setări.
+ */
+export async function runDiscover(
+  trigger: 'cron' | 'manual',
+  target?: { niche: string; city: string }
+): Promise<DiscoverResult> {
   const deadline = Date.now() + timeBudgetMs();
   const orgId = engineOrgId();
   const runId = await startRun('discover', trigger);
@@ -49,7 +56,8 @@ export async function runDiscover(trigger: 'cron' | 'manual'): Promise<DiscoverR
     return { runId, niche: null, city: null, found: 0, inserted: 0, duplicates: 0, errors: [skipped], skipped };
   }
 
-  const pair = await nextDiscoverPair();
+  // O pereche aleasă manual nu avansează rotația
+  const pair = target ?? (await nextDiscoverPair());
   if (!pair) {
     const skipped = 'nicio nișă sau niciun oraș configurat';
     await finishRun(runId, { errors: [skipped] });
@@ -65,7 +73,15 @@ export async function runDiscover(trigger: 'cron' | 'manual'): Promise<DiscoverR
     }
   };
 
-  // Sursele rulează pe rând: Nominatim (folosit de OSM și Meta) cere max 1 req/s
+  // Sursele rulează pe rând: Nominatim (folosit de toate pentru oraș) cere max 1 req/s.
+  // Overture întâi: e sursa cu cea mai bună acoperire.
+  if (isOvertureEnabled()) {
+    if (deadline - Date.now() >= OVERTURE_MIN_TIME_MS) {
+      await collect('Overture', () => discoverOverture(pair.niche, pair.city, deadline));
+    } else {
+      errors.push('Overture: timp insuficient în această rulare');
+    }
+  }
   await collect('OSM', () => discoverOsm(pair.niche, pair.city, deadline));
   if (isMetaAdLibraryEnabled()) await collect('Meta Ad Library', () => discoverMetaAds(pair.niche, pair.city, deadline));
   if (isGooglePlacesEnabled()) await collect('Google Places', () => discoverGooglePlaces(pair.niche, pair.city));

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { checkCronSecret } from '@/lib/cron-auth';
 import { runDiscover } from '@/services/engine/run';
 
@@ -17,21 +18,27 @@ function bucharestHour(now = new Date()): number {
   );
 }
 
-/** Descoperire programată: o pereche nișă × oraș pe rulare. Cere `Authorization: Bearer CRON_SECRET`. */
+/**
+ * Descoperire programată: o pereche nișă × oraș pe rulare. Cere `Authorization: Bearer CRON_SECRET`.
+ *
+ * Răspunde imediat (202) și rulează în fundal cu `waitUntil`: o interogare
+ * Overture durează 25–40s, iar cron-job.org închide cererea după 30s.
+ * Rezultatul apare în „Ultimele rulări” din /pipeline (tabela engine_runs).
+ */
 export async function POST(req: NextRequest) {
   const denied = checkCronSecret(req);
   if (denied) return denied;
 
-  // Programatorul (GitHub Actions) poate întârzia; garda pe oră e aici, nu doar în cron
+  // Programatorul extern poate întârzia; garda pe oră e aici, nu doar în cron
   const hour = bucharestHour();
   if (hour < START_HOUR || hour >= END_HOUR) {
     return NextResponse.json({ skipped: `în afara intervalului ${START_HOUR}:00–${END_HOUR}:00 (Europe/Bucharest)` });
   }
 
-  try {
-    return NextResponse.json(await runDiscover('cron'));
-  } catch (error) {
-    console.error('Cron lead-discover eșuat:', error);
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
-  }
+  waitUntil(
+    runDiscover('cron').catch((error) => {
+      console.error('Cron lead-discover eșuat:', error);
+    })
+  );
+  return NextResponse.json({ started: true }, { status: 202 });
 }

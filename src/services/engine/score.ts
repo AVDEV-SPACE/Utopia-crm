@@ -6,6 +6,9 @@ import { groqJson } from './groq';
  * audit) și are interdicție explicită să inventeze; rezultatul trece apoi prin
  * validări care resping un email prea lung sau cu link-uri.
  */
+/** Scorul maxim al unei firme în afara ICP (aplicat în prompt și în cod). */
+export const NON_ICP_MAX_SCORE = 40;
+
 const SYSTEM_PROMPT = `Ești SDR pentru Utopia Systems, o agenție din România care face site-uri rapide, agenți AI, automatizări și CRM pentru firme locale.
 
 Ofertă pe segment:
@@ -49,7 +52,7 @@ const OUTPUT_SCHEMA = {
  * Modelele pun uneori cratimă neîntreruptibilă (U+2011) sau spații speciale
  * („site‑ul”); în email și la copiere trebuie caractere obișnuite.
  */
-const cleanText = (value: string) =>
+export const cleanText = (value: string) =>
   value
     .replace(/[‐‑‒]/g, '-')
     .replace(/[   ]/g, ' ')
@@ -87,10 +90,10 @@ export interface ScoreFacts {
 
 const MAX_EMAIL_WORDS = 90;
 /** Jargon intern din prompt care nu are ce căuta într-un mesaj către client. */
-const LEAKED_JARGON = /problem[ăa] verificat[ăa]|\bsegment(ul)? [AB]\b|\bICP\b|icp_match|pachet de start/i;
-const LINK_PATTERN = /https?:\/\/|www\.|\b[a-z0-9-]+\.(ro|com|eu|net)\b/i;
+export const LEAKED_JARGON = /problem[ăa] verificat[ăa]|\bsegment(ul)? [AB]\b|\bICP\b|icp_match|pachet de start/i;
+export const LINK_PATTERN = /https?:\/\/|www\.|\b[a-z0-9-]+\.(ro|com|eu|net)\b/i;
 
-const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
+export const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 /**
  * Scorează și scrie pitch-ul. Aruncă eroare dacă răspunsul nu respectă
@@ -122,7 +125,7 @@ export async function scoreLead(facts: ScoreFacts, deadline: number): Promise<Le
     throw new Error('Mesajul conține formulări interne din prompt');
   }
 
-  // Regula ICP se aplică și în cod, nu doar în prompt
+  // Regula ICP se aplică și în cod, nu doar în prompt (enrich nici nu cheamă AI-ul sub prag)
   const score = Math.round(pitch.icp_score);
-  return { ...pitch, icp_score: facts.icp_match ? score : Math.min(score, 40) };
+  return { ...pitch, icp_score: facts.icp_match ? score : Math.min(score, NON_ICP_MAX_SCORE) };
 }

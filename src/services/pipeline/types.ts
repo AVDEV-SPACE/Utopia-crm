@@ -44,7 +44,7 @@ export interface PipelineScoreDetails {
 
 /** Datele de descoperire ale unui lead din motor, păstrate în score_details. */
 export interface EngineDiscovery {
-  /** 'openstreetmap' | 'meta_ad_library' | 'google_places' | 'csv' */
+  /** 'overture' | 'openstreetmap' | 'meta_ad_library' | 'google_places' | 'csv' */
   source: string;
   /** Id-ul în sursă (ex. „node/123", id-ul paginii Facebook, place id) */
   externalId: string | null;
