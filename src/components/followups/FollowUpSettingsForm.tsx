@@ -15,7 +15,8 @@ interface Props {
   initial: FollowUpSettingsResponse;
 }
 
-type FormState = Required<OrganizationSettingsPatch>;
+// Auto-reply-ul pe Facebook / Instagram se setează din /socials, nu de aici
+type FormState = Required<Omit<OrganizationSettingsPatch, 'social_ai_enabled'>>;
 
 function toFormState(data: FollowUpSettingsResponse): FormState {
   return {

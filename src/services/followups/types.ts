@@ -1,6 +1,13 @@
-// Tipurile modulului AI Follow-Up & WhatsApp Automation.
+// Tipurile modulului AI Follow-Up & WhatsApp Automation (și ale inbox-ului /socials).
 
-export type ConversationChannel = 'whatsapp' | 'sms';
+/** WhatsApp / SMS prin Twilio (identificate prin telefon); Facebook / Instagram prin Meta (id extern). */
+export type ConversationChannel = 'whatsapp' | 'sms' | 'facebook' | 'instagram';
+
+/** Canalele pe care persoana e un telefon (restul: PSID / IGSID în `external_user_id`). */
+export const PHONE_CHANNELS: readonly ConversationChannel[] = ['whatsapp', 'sms'];
+
+/** Un mesaj direct sau un comentariu public (doar pe Facebook / Instagram). */
+export type ConversationMessageKind = 'dm' | 'comment';
 
 /** 'user' = clientul, 'assistant' = AI, 'human' = operator uman din CRM */
 export type ConversationRole = 'user' | 'assistant' | 'human';
@@ -13,6 +20,8 @@ export interface OrganizationSettings {
   whatsapp_ai_enabled: boolean;
   whatsapp_system_prompt: string;
   human_takeover_minutes: number;
+  /** Auto-reply AI pe DM-urile primite pe Facebook / Instagram (setup-db-socials.sql) */
+  social_ai_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -24,13 +33,19 @@ export interface OrganizationSettingsPatch {
   whatsapp_ai_enabled?: boolean;
   whatsapp_system_prompt?: string;
   human_takeover_minutes?: number;
+  social_ai_enabled?: boolean;
 }
 
 export interface Conversation {
   id: string;
   org_id: string;
   channel: ConversationChannel;
-  contact_phone: string;
+  /** NULL pe Facebook / Instagram */
+  contact_phone: string | null;
+  /** PSID (Facebook) / IGSID (Instagram); NULL pe WhatsApp / SMS */
+  external_user_id: string | null;
+  /** Lead-ul din CRM al persoanei, când e cunoscut */
+  lead_id: string | null;
   wa_id: string | null;
   contact_name: string | null;
   taken_by_human: boolean;
@@ -46,6 +61,11 @@ export interface ConversationMessage {
   role: ConversationRole;
   body: string;
   twilio_sid: string | null;
+  /** `mid` / id-ul comentariului pe Meta — cheia de idempotență */
+  external_id: string | null;
+  kind: ConversationMessageKind;
+  /** Postarea / comentariul-părinte al unui comentariu */
+  external_parent_id: string | null;
   created_at: string;
 }
 

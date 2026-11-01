@@ -70,6 +70,7 @@ export async function updateSettings(
       whatsapp_ai_enabled     = COALESCE(${patch.whatsapp_ai_enabled ?? null}, whatsapp_ai_enabled),
       whatsapp_system_prompt  = COALESCE(${patch.whatsapp_system_prompt ?? null}, whatsapp_system_prompt),
       human_takeover_minutes  = COALESCE(${patch.human_takeover_minutes ?? null}, human_takeover_minutes),
+      social_ai_enabled       = COALESCE(${patch.social_ai_enabled ?? null}, social_ai_enabled),
       updated_at              = now()
     WHERE org_id = ${orgId}
     RETURNING *
