@@ -1,7 +1,7 @@
 import { sql } from '@/lib/neon';
 import { PIPELINE_SOURCES } from '@/services/pipeline/repository';
 import { STEP_OFFSET_DAYS, TODAY_START_SQL } from './schedule';
-import type { OutreachChannel, OutreachTask } from './types';
+import type { CampaignFilters, OutreachChannel, OutreachTask } from './types';
 
 /** Etapele din care un lead intră în secvență. */
 export const PLANNABLE_STAGES = ['QUEUED_EMAIL', 'QUEUED_MANUAL'];
@@ -24,11 +24,24 @@ export interface PlanCandidate {
   linkedin_dm: string | null;
 }
 
+/** Filtrele unei campanii; goale = toți candidații (ca jobul automat). */
+export const NO_FILTERS: CampaignFilters = { niches: [], cities: [], minScore: null, emailOnly: false };
+
+const lowered = (values: string[]) => values.map((v) => v.trim().toLowerCase()).filter(Boolean);
+
 /**
- * Leaduri din motor / import, cu ICP, în coadă și fără niciun pas creat.
- * Cele mai bune scoruri întâi.
+ * Leaduri din motor / import, cu ICP, în coadă și fără niciun pas creat
+ * („nepitched”). Cele mai bune scoruri întâi. `onlyTo` (lista de test): doar
+ * leadurile cu aceste adrese, ca un test să nu planifice secvențe pentru
+ * leaduri reale. `filters` restrânge la nișe / orașe / scor (campaniile),
+ * `exclude` sare peste leadurile amânate deja în aceeași campanie.
  */
-export async function listPlanCandidates(limit: number): Promise<PlanCandidate[]> {
+export async function listPlanCandidates(
+  limit: number,
+  onlyTo: string[] = [],
+  filters: CampaignFilters = NO_FILTERS,
+  exclude: string[] = []
+): Promise<PlanCandidate[]> {
   const rows = await sql`
     SELECT l.id::text, l.company_name, l.niche, l.location, l.contact_email, l.contact_instagram,
            l.score_details->'social'->>'linkedin' AS linkedin,
@@ -39,11 +52,79 @@ export async function listPlanCandidates(limit: number): Promise<PlanCandidate[]
     WHERE l.source = ANY(${PIPELINE_SOURCES}::text[])
       AND l.pipeline_stage = ANY(${PLANNABLE_STAGES}::text[])
       AND l.icp_match = true
+      AND (cardinality(${onlyTo}::text[]) = 0 OR lower(l.contact_email) = ANY(${onlyTo}::text[]))
+      AND (cardinality(${lowered(filters.niches)}::text[]) = 0 OR lower(trim(l.niche)) = ANY(${lowered(filters.niches)}::text[]))
+      AND (cardinality(${lowered(filters.cities)}::text[]) = 0 OR lower(trim(l.location)) = ANY(${lowered(filters.cities)}::text[]))
+      AND (${filters.minScore}::int IS NULL OR l.score >= ${filters.minScore}::int)
+      AND (NOT ${filters.emailOnly}::boolean OR l.contact_email IS NOT NULL)
+      AND NOT (l.id = ANY(${exclude}::uuid[]))
       AND NOT EXISTS (SELECT 1 FROM outreach_tasks t WHERE t.lead_id = l.id)
     ORDER BY l.score DESC NULLS LAST, l.created_at
     LIMIT ${limit}
   `;
   return rows as unknown as PlanCandidate[];
+}
+
+/** Publicul unei campanii: câți candidați se potrivesc filtrelor și opțiunile de filtrare. */
+export interface CampaignAudience {
+  total: number;
+  withEmail: number;
+  /** Cu pitch AI generat (pasul 1 pe AI are nevoie de el) */
+  withPitch: number;
+  /** Primii candidați, în ordinea în care se planifică */
+  sample: { id: string; name: string; niche: string | null; location: string | null }[];
+  /** Nișele și orașele tuturor candidaților (fără filtre), cu numărul lor */
+  niches: { value: string; count: number }[];
+  cities: { value: string; count: number }[];
+}
+
+export async function getCampaignAudience(filters: CampaignFilters, onlyTo: string[] = []): Promise<CampaignAudience> {
+  // Condițiile de candidat sunt aceleași ca în listPlanCandidates (fragmentele SQL nu se compun cu driverul Neon)
+  const [counts, sample, facets] = await Promise.all([
+    sql`
+      SELECT count(*)::int AS total,
+             count(*) FILTER (WHERE l.contact_email IS NOT NULL)::int AS with_email,
+             count(*) FILTER (WHERE l.pitch_generated IS NOT NULL)::int AS with_pitch
+      FROM leads l
+      WHERE l.source = ANY(${PIPELINE_SOURCES}::text[])
+        AND l.pipeline_stage = ANY(${PLANNABLE_STAGES}::text[])
+        AND l.icp_match = true
+        AND (cardinality(${onlyTo}::text[]) = 0 OR lower(l.contact_email) = ANY(${onlyTo}::text[]))
+        AND (cardinality(${lowered(filters.niches)}::text[]) = 0 OR lower(trim(l.niche)) = ANY(${lowered(filters.niches)}::text[]))
+        AND (cardinality(${lowered(filters.cities)}::text[]) = 0 OR lower(trim(l.location)) = ANY(${lowered(filters.cities)}::text[]))
+        AND (${filters.minScore}::int IS NULL OR l.score >= ${filters.minScore}::int)
+        AND (NOT ${filters.emailOnly}::boolean OR l.contact_email IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM outreach_tasks t WHERE t.lead_id = l.id)
+    `,
+    listPlanCandidates(20, onlyTo, filters),
+    sql`
+      SELECT 'niche' AS kind, trim(l.niche) AS value, count(*)::int AS count
+      FROM leads l
+      WHERE l.source = ANY(${PIPELINE_SOURCES}::text[]) AND l.pipeline_stage = ANY(${PLANNABLE_STAGES}::text[])
+        AND l.icp_match = true AND coalesce(trim(l.niche), '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM outreach_tasks t WHERE t.lead_id = l.id)
+      GROUP BY trim(l.niche)
+      UNION ALL
+      SELECT 'city', trim(l.location), count(*)::int
+      FROM leads l
+      WHERE l.source = ANY(${PIPELINE_SOURCES}::text[]) AND l.pipeline_stage = ANY(${PLANNABLE_STAGES}::text[])
+        AND l.icp_match = true AND coalesce(trim(l.location), '') <> ''
+        AND NOT EXISTS (SELECT 1 FROM outreach_tasks t WHERE t.lead_id = l.id)
+      GROUP BY trim(l.location)
+      ORDER BY count DESC
+    `,
+  ]);
+  const c = counts[0] as { total: number; with_email: number; with_pitch: number };
+  const facet = (kind: string) =>
+    facets.filter((f) => f.kind === kind).map((f) => ({ value: f.value as string, count: f.count as number }));
+  return {
+    total: c.total,
+    withEmail: c.with_email,
+    withPitch: c.with_pitch,
+    sample: sample.map((s) => ({ id: s.id, name: s.company_name, niche: s.niche, location: s.location })),
+    niches: facet('niche'),
+    cities: facet('city'),
+  };
 }
 
 /** Câte secvențe noi (pasul 1) s-au planificat azi pe fiecare canal. */
@@ -243,45 +324,61 @@ export async function markOpened(taskId: string): Promise<boolean> {
 }
 
 
-// ── Răspunsuri (detectate de syncEmailReplies în sent_messages) ────────────
+// ── Răspunsuri: fiecare email primit de la un lead e un eveniment ──────────
 
-/** Un răspuns la un pas de outreach, încă neprocesat. */
-export interface UnhandledReply {
-  task_id: string;
+/** Un lead căruia i s-a scris pe email (manual sau din secvență), cu adresa folosită. */
+export interface EmailContact {
   lead_id: string;
-  step: number;
+  email: string;
   pipeline_stage: string | null;
-  status: string | null;
   source_ref: string | null;
-  contact_email: string | null;
-  reply_subject: string | null;
-  reply_snippet: string | null;
-  replied_at: string;
+  /** Primul email trimis: ce a venit înainte nu e un răspuns */
+  first_sent_at: string;
+  last_sent_at: string;
+}
+
+/** Leadurile contactate pe email în ultimele 60 de zile — adresele de urmărit în Gmail. */
+export async function listEmailContacts(): Promise<EmailContact[]> {
+  const rows = await sql`
+    SELECT l.id::text AS lead_id, LOWER(s.recipient_email) AS email, l.pipeline_stage, l.source_ref,
+           min(s.created_at) AS first_sent_at, max(s.created_at) AS last_sent_at
+    FROM sent_messages s
+    JOIN leads l ON l.id = s.lead_id
+    WHERE s.channel = 'email' AND s.recipient_type = 'lead' AND s.status = 'sent'
+      AND s.recipient_email IS NOT NULL AND s.created_at > now() - interval '60 days'
+    GROUP BY l.id, LOWER(s.recipient_email), l.pipeline_stage, l.source_ref
+  `;
+  return rows as unknown as EmailContact[];
 }
 
 /**
- * Pașii trimiși la care `sent_messages` a înregistrat un răspuns, dar pe care
- * outreach-ul nu i-a procesat încă. Legătura e Message-ID-ul emailului.
+ * Message-ID-urile emailurilor primite deja procesate pentru aceste leaduri
+ * (normalizate: fără `<>`, litere mici). Pe lângă marcajul curent
+ * (`payload.replyMessageId`), și răspunsurile procesate de versiunea
+ * anterioară, legate prin `sent_messages.reply_message_id`.
  */
-export async function listUnhandledReplies(limit: number): Promise<UnhandledReply[]> {
+export async function listRecordedReplyIds(leadIds: string[]): Promise<Set<string>> {
   const rows = await sql`
-    SELECT t.id::text AS task_id, t.lead_id::text, t.step, l.pipeline_stage, l.status::text AS status,
-           l.source_ref, l.contact_email, s.reply_subject, s.reply_snippet, s.replied_at
-    FROM outreach_tasks t
-    JOIN sent_messages s ON s.message_id = t.message_id
-    JOIN leads l ON l.id = t.lead_id
-    WHERE t.channel = 'email' AND t.message_id IS NOT NULL
-      AND t.reply_handled_at IS NULL AND s.replied_at IS NOT NULL
-    ORDER BY s.replied_at
-    LIMIT ${limit}
+    SELECT LOWER(TRIM(BOTH '<>' FROM e.payload->>'replyMessageId')) AS id
+    FROM pipeline_events e
+    WHERE e.lead_id = ANY(${leadIds}::uuid[]) AND e.payload ? 'replyMessageId'
+    UNION
+    SELECT LOWER(TRIM(BOTH '<>' FROM s.reply_message_id))
+    FROM sent_messages s
+    WHERE s.lead_id = ANY(${leadIds}::uuid[]) AND s.reply_message_id IS NOT NULL
+      AND (
+        EXISTS (SELECT 1 FROM pipeline_events e WHERE e.lead_id = s.lead_id AND e.payload->>'sentMessageId' = s.id::text)
+        OR EXISTS (SELECT 1 FROM outreach_tasks t WHERE t.message_id = s.message_id AND t.reply_handled_at IS NOT NULL)
+      )
   `;
-  return rows as unknown as UnhandledReply[];
+  return new Set(rows.map((r) => r.id as string).filter(Boolean));
 }
 
-export async function markReplyHandled(taskId: string, intent: string | null): Promise<void> {
+/** Răspunsul unui lead e procesat: pașii lui trimiși primesc marcajul și intenția. */
+export async function markLeadRepliesHandled(leadId: string, intent: string | null): Promise<void> {
   await sql`
     UPDATE outreach_tasks SET reply_handled_at = now(), reply_intent = ${intent}, updated_at = now()
-    WHERE id = ${taskId}::uuid
+    WHERE lead_id = ${leadId}::uuid AND channel = 'email' AND message_id IS NOT NULL AND reply_handled_at IS NULL
   `;
 }
 
@@ -359,4 +456,18 @@ export async function getPlannedStep(leadId: string, step: number): Promise<Pick
     WHERE lead_id = ${leadId}::uuid AND channel = 'email' AND step = ${step}
   `;
   return (rows[0] as unknown as Pick<OutreachTask, 'subject' | 'message' | 'template_id'>) ?? null;
+}
+
+/**
+ * Tenanturile cu emailuri către leaduri care încă așteaptă răspuns. Pașii
+ * automați se jurnalizează pe orgul pipeline-ului, dar trimiterile manuale pe
+ * tenantul utilizatorului — care poate fi altul (`user:<id>`).
+ */
+export async function listAwaitingReplyOrgs(): Promise<string[]> {
+  const rows = await sql`
+    SELECT DISTINCT org_id FROM sent_messages
+    WHERE channel = 'email' AND recipient_type = 'lead' AND lead_id IS NOT NULL
+      AND status = 'sent' AND replied_at IS NULL AND created_at > now() - interval '60 days'
+  `;
+  return rows.map((r) => r.org_id as string);
 }

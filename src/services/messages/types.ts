@@ -1,5 +1,5 @@
-/** `instagram` apare doar pe liniile derivate din `leads.pitch_channel`. */
-export type MessageChannel = 'email' | 'sms' | 'whatsapp' | 'instagram';
+/** Instagram / Facebook / LinkedIn: trimiteri manuale din fișa lead-ului (și `leads.pitch_channel`). */
+export type MessageChannel = 'email' | 'sms' | 'whatsapp' | 'instagram' | 'facebook' | 'linkedin';
 export type MessageRecipientType = 'lead' | 'client';
 export type MessageStatus = 'sent' | 'failed';
 

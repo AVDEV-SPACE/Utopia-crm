@@ -13,7 +13,6 @@ import {
   BookOpen,
   Target,
   Bot,
-  Database,
   Workflow,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -25,7 +24,6 @@ const menuItems = [
   { name: 'Chats',  href: '/messaging',               icon: Mail },
   { name: 'Emails',  href: '/educational-templates',   icon: BookOpen },
   { name: 'Lead Generation', href: '/lead-generation',     icon: Target },
-  { name: 'Leads',       href: '/leads',                   icon: Database },
   { name: 'Pipeline',    href: '/pipeline',                icon: Workflow },
   { name: 'AI Follow-Up', href: '/dashboard/follow-ups-ai', icon: Bot },
 ];
@@ -64,7 +62,7 @@ export default function Sidebar() {
           <Link href="/overview" className="flex items-center gap-3 min-w-0 shrink-0">
             {/* Logo-ul are deja fundal și colțuri rotunjite în imagine */}
             <Image
-              src="/favicon-96x96.png"
+              src="/utopia-icon.svg"
               alt="Utopia CRM"
               width={36}
               height={36}

@@ -7,7 +7,7 @@ import { STAGE_RANK, TERMINAL_STAGES } from '@/services/pipeline/stages';
 import { resolveStepContent, type StepContent } from './content';
 import { composeOutreachEmail, senderFooter, trackingBaseUrl } from './email';
 import { claimDueEmailTasks, countSentToday, markTaskFailed, markTaskSent, stopSequence, type ClaimedEmailTask } from './repository';
-import { dailyCap, isSendingEnabled, sendWindowBlock } from './schedule';
+import { allowedRecipients, dailyCap, isSendingEnabled, sendWindowBlock } from './schedule';
 import { getTemplates } from './templates';
 import type { SendResult } from './types';
 
@@ -18,14 +18,6 @@ const MAX_PER_RUN = 2;
 export function stopsSequence(stage: string | null): boolean {
   if (!stage) return false;
   return TERMINAL_STAGES.has(stage) || (STAGE_RANK[stage] ?? 0) >= STAGE_RANK.REPLIED;
-}
-
-/** Lista de test (`OUTREACH_ALLOWED_RECIPIENTS`): dacă e setată, doar aceste adrese primesc. */
-function allowedRecipients(): string[] {
-  return (process.env.OUTREACH_ALLOWED_RECIPIENTS ?? '')
-    .split(',')
-    .map((a) => a.trim().toLowerCase())
-    .filter(Boolean);
 }
 
 /**

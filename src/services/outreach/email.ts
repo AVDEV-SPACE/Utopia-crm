@@ -3,6 +3,7 @@
  * text) sau dintr-un template HTML. În ambele cazuri se adaugă semnătura PFA,
  * linkul de dezabonare și pixelul de deschidere, plus o variantă text.
  */
+import { htmlToText } from './render';
 
 export interface ComposedEmail {
   text: string;
@@ -25,22 +26,31 @@ export function trackingBaseUrl(requestOrigin: string): string {
   return (process.env.NEXT_PUBLIC_APP_URL || requestOrigin).replace(/\/+$/, '');
 }
 
-/** Varianta text a unui HTML: fără <head>/<style>/<script>, cu rânduri noi la blocuri. */
-export function htmlToText(html: string): string {
-  return html
-    .replace(/<(head|style|script|title)[^>]*>[\s\S]*?<\/\1>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li|tr|table)>/gi, '\n')
-    .replace(/<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, '$2 ($1)')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n\s*\n\s*\n+/g, '\n\n')
-    .trim();
+export { htmlToText };
+
+/**
+ * Corpul HTML + semnătura, fără tracking (trimiterile manuale din fișa
+ * lead-ului: nu au token de dezabonare/pixel, care țin de secvența automată).
+ */
+export function composeManualEmail(input: { body: string; html: boolean; footer: string | null }): { html: string; text: string } {
+  const footerHtml = input.footer ? escapeHtml(input.footer).replace(/\n/g, '<br>') : null;
+  const signature = footerHtml
+    ? `<p style="margin:16px 0 0;color:#57534e;font-family:Arial,Helvetica,sans-serif;font-size:14px">--<br>${footerHtml}</p>`
+    : '';
+
+  if (input.html) {
+    const html = /<\/body>/i.test(input.body) ? input.body.replace(/<\/body>/i, `${signature}</body>`) : `${input.body}${signature}`;
+    return { html, text: [htmlToText(input.body), input.footer ? `\n--\n${input.footer}` : ''].join('') };
+  }
+  const paragraphs = input.body
+    .trim()
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 12px">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+  return {
+    html: `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1c1917">${paragraphs}${signature}</div>`,
+    text: [input.body.trim(), input.footer ? `\n--\n${input.footer}` : ''].join(''),
+  };
 }
 
 export function composeOutreachEmail(input: {

@@ -5,7 +5,9 @@ import {
   ChevronDown,
   CornerDownRight,
   ExternalLink,
+  Facebook,
   Instagram,
+  Linkedin,
   Loader2,
   Mail,
   MessageCircle,
@@ -29,6 +31,9 @@ const CHANNEL_FILTERS: { value: 'all' | MessageChannel; label: string }[] = [
   { value: 'email', label: 'Email' },
   { value: 'sms', label: 'SMS' },
   { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'linkedin', label: 'LinkedIn' },
 ];
 
 const CHANNEL_ICONS: Record<MessageChannel, typeof Mail> = {
@@ -36,6 +41,8 @@ const CHANNEL_ICONS: Record<MessageChannel, typeof Mail> = {
   sms: Smartphone,
   whatsapp: MessageCircle,
   instagram: Instagram,
+  facebook: Facebook,
+  linkedin: Linkedin,
 };
 
 const CHANNEL_LABELS: Record<MessageChannel, string> = {
@@ -43,6 +50,8 @@ const CHANNEL_LABELS: Record<MessageChannel, string> = {
   sms: 'SMS',
   whatsapp: 'WhatsApp',
   instagram: 'Instagram',
+  facebook: 'Facebook',
+  linkedin: 'LinkedIn',
 };
 
 /** Pitch-urile sunt HTML — în tabel afișăm doar textul. */

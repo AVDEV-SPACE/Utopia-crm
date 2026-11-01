@@ -13,7 +13,7 @@ const SYSTEM_PROMPT = `Ești SDR pentru Utopia Systems, o agenție din România 
 
 Ofertă pe segment:
 - Segment A (firma investește deja în reclame): transformăm traficul plătit în clienți — pagini care convertesc, programări online, răspuns automat la lead-uri.
-- Segment B: pachet de start — site rapid + programări online + profil Google optimizat, pornind de la o problemă verificată.
+- Segment B: site rapid + programări online + profil Google optimizat, pornind de la o problemă din probleme_audit. Descrie beneficiile concrete, fără să dai un nume ofertei.
 
 ICP: firma investește în reclame SAU e activă pe social media. Dacă icp_match=false, icp_score este maximum 40.
 
@@ -100,32 +100,42 @@ export const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).len
  * regulile — apelantul marchează lead-ul AI_ERROR și îl reia la o rulare ulterioară.
  */
 export async function scoreLead(facts: ScoreFacts, deadline: number): Promise<LeadPitch> {
-  const raw = await groqJson({
-    system: SYSTEM_PROMPT,
-    user: `Date verificate despre firmă (JSON):\n${JSON.stringify(facts)}`,
-    schemaName: 'lead_pitch',
-    schema: OUTPUT_SCHEMA,
-    maxTokens: 1_500,
-    deadline,
-  });
+  const user = `Date verificate despre firmă (JSON):\n${JSON.stringify(facts)}`;
+  let rejection: string | null = null;
 
-  const parsed = outputSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`Răspuns AI invalid: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}`);
-  }
+  // O a doua încercare doar când răspunsul încalcă regulile: modelul primește motivul respingerii
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const raw = await groqJson({
+      system: SYSTEM_PROMPT,
+      user: rejection
+        ? `${user}\n\nRăspunsul anterior a fost respins: ${rejection}. Rescrie mesajele respectând toate regulile.`
+        : user,
+      schemaName: 'lead_pitch',
+      schema: OUTPUT_SCHEMA,
+      maxTokens: 1_500,
+      deadline,
+    });
 
-  const pitch = parsed.data;
-  if (wordCount(pitch.email_body) > MAX_EMAIL_WORDS) {
-    throw new Error(`Email prea lung (${wordCount(pitch.email_body)} cuvinte)`);
+    const parsed = outputSchema.safeParse(raw);
+    rejection = parsed.success
+      ? pitchViolation(parsed.data)
+      : `Răspuns AI invalid: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}`;
+    if (parsed.success && !rejection) {
+      // Regula ICP se aplică și în cod, nu doar în prompt (enrich nici nu cheamă AI-ul sub prag)
+      const score = Math.round(parsed.data.icp_score);
+      return { ...parsed.data, icp_score: facts.icp_match ? score : Math.min(score, NON_ICP_MAX_SCORE) };
+    }
   }
-  if (LINK_PATTERN.test(pitch.email_body) || LINK_PATTERN.test(pitch.linkedin_dm) || LINK_PATTERN.test(pitch.instagram_dm)) {
-    throw new Error('Mesajul conține link-uri');
-  }
-  if ([pitch.subject, pitch.email_body, pitch.linkedin_dm, pitch.instagram_dm].some((t) => LEAKED_JARGON.test(t))) {
-    throw new Error('Mesajul conține formulări interne din prompt');
-  }
+  throw new Error(rejection ?? 'Răspuns AI invalid');
+}
 
-  // Regula ICP se aplică și în cod, nu doar în prompt (enrich nici nu cheamă AI-ul sub prag)
-  const score = Math.round(pitch.icp_score);
-  return { ...pitch, icp_score: facts.icp_match ? score : Math.min(score, NON_ICP_MAX_SCORE) };
+/** Regula încălcată de un pitch, sau `null` dacă e în regulă. */
+function pitchViolation(pitch: LeadPitch): string | null {
+  if (wordCount(pitch.email_body) > MAX_EMAIL_WORDS) return `Email prea lung (${wordCount(pitch.email_body)} cuvinte)`;
+  if ([pitch.email_body, pitch.linkedin_dm, pitch.instagram_dm].some((t) => LINK_PATTERN.test(t))) return 'Mesajul conține link-uri';
+  const leaked = [pitch.subject, pitch.email_body, pitch.linkedin_dm, pitch.instagram_dm]
+    .map((t) => t.match(LEAKED_JARGON)?.[0])
+    .find(Boolean);
+  if (leaked) return `Mesajul conține formulări interne din prompt („${leaked}”)`;
+  return null;
 }

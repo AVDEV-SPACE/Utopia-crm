@@ -70,9 +70,8 @@ export default function Header() {
       type: 'lead' as const,
       key: l.id,
       label: l.company_name,
-      // Deschide fișa în pagina care chiar conține lead-ul: cele importate din
-      // spreadsheet trăiesc în /leads, restul în /lead-generation.
-      href: l.source === 'sheet' ? `/leads?lead=${l.id}` : `/lead-generation?lead=${l.id}`,
+      // Toate leadurile sunt în /pipeline (fosta /leads a fost unită cu ea)
+      href: `/pipeline?lead=${l.id}`,
       hint: l.contact_email || l.contact_phone || [l.niche, l.location].filter(Boolean).join(' · ') || '—',
     })),
   ];

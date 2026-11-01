@@ -69,6 +69,20 @@ export interface Lead {
   updated_at: string;
 }
 
+/** Etichetele statusurilor CRM (`leads.status`), pentru tabele. */
+export const LEAD_STATUS_LABELS: Record<string, string> = {
+  new: 'Nou',
+  scored: 'Scorat',
+  pitch_ready: 'Pitch gata',
+  sent: 'Trimis',
+  replied: 'A răspuns',
+  negotiating: 'Negociere',
+  won: 'Câștigat',
+  lost: 'Pierdut',
+  MISSED_CALL: 'Apel pierdut',
+  WEB_FORM: 'Formular site',
+};
+
 /**
  * Câmpurile CRM în care poate fi mapată o coloană dintr-un spreadsheet.
  * `company_name` e singurul obligatoriu — fără el rândul nu poate fi importat.

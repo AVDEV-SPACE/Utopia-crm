@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Utopia">
+  <defs>
+    <linearGradient id="utopia-icon-mix" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="512" y2="0">
+      <stop offset="0%" stop-color="#c42006"/>
+      <stop offset="6%" stop-color="#3d1006"/>
+      <stop offset="10%" stop-color="#120405"/>
+      <stop offset="16%" stop-color="#5a0544"/>
+      <stop offset="27%" stop-color="#760056"/>
+      <stop offset="33%" stop-color="#2e041a"/>
+      <stop offset="37%" stop-color="#c4142b"/>
+      <stop offset="46%" stop-color="#fe3b35"/>
+      <stop offset="66%" stop-color="#e72627"/>
+      <stop offset="84%" stop-color="#e43727"/>
+      <stop offset="100%" stop-color="#f7542e"/>
+    </linearGradient>
+    <linearGradient id="utopia-icon-shade" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="512">
+      <stop offset="0%"   stop-color="#2a0008" stop-opacity="0.30"/>
+      <stop offset="35%"  stop-color="#2a0008" stop-opacity="0"/>
+      <stop offset="62%"  stop-color="#1a0208" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#1a0208" stop-opacity="0.55"/>
+    </linearGradient>
+    <filter id="utopia-icon-arcglow" x="-50%" y="-20%" width="200%" height="140%">
+      <feGaussianBlur stdDeviation="9"/>
+    </filter>
+    <filter id="utopia-icon-arccore" x="-50%" y="-20%" width="200%" height="140%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+    <radialGradient id="utopia-icon-hot" cx="0.88" cy="0.18" r="0.55">
+      <stop offset="0%"   stop-color="#ff7a3d" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#ff7a3d" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="utopia-icon-round"><rect width="512" height="512" rx="112"/></clipPath>
+    <filter id="utopia-icon-shadow" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#12020a" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <g clip-path="url(#utopia-icon-round)">
+      <rect x="-200" y="-200" width="912" height="912" fill="url(#utopia-icon-mix)"/>
+      <path d="M 178,-30 C 182,190 245,370 395,545" fill="none" stroke="#ff1a6c" stroke-opacity="0.6" stroke-width="44" filter="url(#utopia-icon-arcglow)"/>
+      <path d="M 178,-30 C 182,190 245,370 395,545" fill="none" stroke="#ff4d94" stroke-width="9" filter="url(#utopia-icon-arccore)"/>
+      <rect x="-200" y="-200" width="912" height="912" fill="url(#utopia-icon-shade)"/>
+      <rect width="512" height="512" fill="url(#utopia-icon-hot)"/>
+  </g>
+  <g filter="url(#utopia-icon-shadow)" transform="translate(256 262) scale(0.5) translate(-368.5 321.5)">
+    <path fill="#fff4ec" d="M 351.0,96.0 Q 351.0,107.0 342.0,107.0 Q 338.0,107.0 330.0,103.0 Q 291.0,61.0 291.0,-12.0 Q 291.0,-70.0 315.5,-142.0 Q 340.0,-214.0 364.0,-257.0 L 388.0,-300.0 Q 390.0,-303.0 390.0,-307.0 Q 390.0,-309.0 388.0,-309.0 L 378.0,-305.0 Q 290.0,-191.0 213.0,-113.0 Q 136.0,-35.0 94.5,-7.5 Q 53.0,20.0 33.0,20.0 Q 0.0,20.0 0.0,-33.0 Q 0.0,-102.0 44.0,-210.5 Q 88.0,-319.0 153.5,-427.5 Q 219.0,-536.0 257.0,-594.0 Q 295.0,-652.0 319.0,-686.0 Q 342.0,-717.0 370.0,-733.5 Q 398.0,-750.0 418.0,-750.0 Q 433.0,-750.0 433.0,-741.0 Q 433.0,-736.0 427.0,-726.0 Q 416.0,-702.0 369.0,-630.0 Q 348.0,-596.0 316.5,-541.5 Q 285.0,-487.0 221.5,-358.0 Q 158.0,-229.0 136.0,-149.0 Q 134.0,-140.0 134.0,-131.0 Q 134.0,-109.0 148.0,-109.0 Q 159.0,-109.0 183.0,-127.0 Q 187.0,-130.0 194.5,-136.5 Q 202.0,-143.0 230.5,-172.0 Q 259.0,-201.0 292.0,-239.0 Q 325.0,-277.0 380.0,-348.0 Q 435.0,-419.0 495.0,-504.0 Q 603.0,-682.0 650.0,-725.0 Q 677.0,-750.0 720.0,-750.0 Q 737.0,-750.0 737.0,-741.0 Q 737.0,-733.0 731.0,-723.0 Q 704.0,-675.0 678.0,-639.0 Q 657.0,-607.0 624.0,-553.5 Q 591.0,-500.0 517.5,-366.0 Q 444.0,-232.0 404.0,-134.0 Q 348.0,-7.0 348.0,66.0 Q 348.0,73.0 349.5,83.5 Q 351.0,94.0 351.0,96.0"/>
+  </g>
+</svg>

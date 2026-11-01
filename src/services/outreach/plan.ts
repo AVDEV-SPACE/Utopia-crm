@@ -2,9 +2,17 @@ import { GroqRateLimitError } from '@/services/engine/groq';
 import { generateFollowups } from './ai';
 import { htmlToText } from './email';
 import { countPlannedToday, insertSequence, listPlanCandidates, type NewStep, type PlanCandidate } from './repository';
-import { dailyCap, STEP_OFFSET_DAYS } from './schedule';
+import { allowedRecipients, dailyCap, STEP_OFFSET_DAYS } from './schedule';
 import { getOutreachSettings, getTemplates, isHtmlContent, renderTemplate, templateForStep } from './templates';
-import type { OutreachChannel, OutreachSettings, OutreachTemplate, PlanResult } from './types';
+import type { CampaignFilters, OutreachChannel, OutreachSettings, OutreachTemplate, PlanResult } from './types';
+
+/** O campanie manuală: un lot din publicul filtrat, fără plafonul zilnic de planificare. */
+export interface CampaignBatch {
+  filters: CampaignFilters;
+  limit: number;
+  /** Leaduri amânate în loturile anterioare ale aceleiași campanii */
+  exclude: string[];
+}
 
 /** Câte leaduri încercăm pe rulare (fiecare poate cere un apel Groq, ~3–5s). */
 const MAX_CANDIDATES_PER_RUN = 30;
@@ -61,17 +69,27 @@ const addDays = (date: Date, days: number) => new Date(date.getTime() + days * 8
  *
  * Alegerea template-urilor se aplică secvențelor planificate de acum; editarea
  * conținutului unui template se vede și în pașii deja planificați.
+ *
+ * Cu `campaign` (planificare manuală pe filtre), plafonul zilnic de planificare
+ * nu se aplică: pașii stau în coadă, iar trimiterea îi ia în ritmul ei
+ * (plafonul zilnic de trimitere, intervalul 09–17).
  */
-export async function runOutreachPlan(budgetMs: number): Promise<PlanResult> {
+export async function runOutreachPlan(budgetMs: number, campaign?: CampaignBatch): Promise<PlanResult> {
   const deadline = Date.now() + budgetMs;
-  const result: PlanResult = { candidates: 0, planned: 0, deferred: 0, errors: [] };
+  const result: PlanResult = { candidates: 0, planned: 0, deferred: 0, deferredIds: [], errors: [] };
+  const defer = (leadId: string) => {
+    result.deferred++;
+    result.deferredIds!.push(leadId);
+  };
 
   const [settings, plannedToday] = await Promise.all([getOutreachSettings(), countPlannedToday()]);
-  const room: Record<OutreachChannel, number> = {
-    email: Math.max(dailyCap('email') - plannedToday.email, 0),
-    instagram: Math.max(dailyCap('instagram') - plannedToday.instagram, 0),
-    linkedin: Math.max(dailyCap('linkedin') - plannedToday.linkedin, 0),
-  };
+  const room: Record<OutreachChannel, number> = campaign
+    ? { email: Infinity, instagram: Infinity, linkedin: Infinity }
+    : {
+        email: Math.max(dailyCap('email') - plannedToday.email, 0),
+        instagram: Math.max(dailyCap('instagram') - plannedToday.instagram, 0),
+        linkedin: Math.max(dailyCap('linkedin') - plannedToday.linkedin, 0),
+      };
   if (room.email + room.instagram + room.linkedin === 0) {
     return { ...result, stoppedReason: 'plafoanele zilnice de planificare sunt atinse' };
   }
@@ -79,7 +97,9 @@ export async function runOutreachPlan(budgetMs: number): Promise<PlanResult> {
   const chosen = [1, 2, 3].map((step) => templateForStep(settings, step)).filter((id): id is number => id !== null);
   const templates = await getTemplates(chosen);
 
-  const candidates = await listPlanCandidates(MAX_CANDIDATES_PER_RUN);
+  const candidates = campaign
+    ? await listPlanCandidates(campaign.limit, allowedRecipients(), campaign.filters, campaign.exclude)
+    : await listPlanCandidates(MAX_CANDIDATES_PER_RUN, allowedRecipients());
   result.candidates = candidates.length;
 
   for (const lead of candidates) {
@@ -89,8 +109,8 @@ export async function runOutreachPlan(budgetMs: number): Promise<PlanResult> {
     }
 
     const first = firstStep(lead, settings, templates);
-    if (!first) {
-      result.deferred++;
+    if (!first || (campaign?.filters.emailOnly && first.channel !== 'email')) {
+      defer(lead.id);
       continue;
     }
     if (room[first.channel] <= 0) continue;
@@ -123,7 +143,7 @@ export async function runOutreachPlan(budgetMs: number): Promise<PlanResult> {
           result.stoppedReason = err.message;
           break;
         }
-        result.deferred++;
+        defer(lead.id);
         result.errors.push(`${lead.company_name}: ${(err as Error).message}`);
         continue;
       }

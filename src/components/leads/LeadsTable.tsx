@@ -6,7 +6,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { formatWhatsAppLink } from '@/lib/utils';
 import { logWhatsAppSend } from '@/lib/sent-messages-client';
-import { Lead } from '@/services/leads/types';
+import { LEAD_STATUS_LABELS as STATUS_LABELS, Lead } from '@/services/leads/types';
 import type { PitchSummary } from '@/services/messages/repository';
 
 interface LeadsTableProps {
@@ -44,19 +44,6 @@ function scoreColorClass(score: number | null): string {
   if (score < 70) return 'text-yellow-400 bg-yellow-500/10 border border-yellow-500/20';
   return 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20';
 }
-
-const STATUS_LABELS: Record<string, string> = {
-  new: 'Nou',
-  scored: 'Scorat',
-  pitch_ready: 'Pitch gata',
-  sent: 'Trimis',
-  replied: 'A răspuns',
-  negotiating: 'Negociere',
-  won: 'Câștigat',
-  lost: 'Pierdut',
-  MISSED_CALL: 'Apel pierdut',
-  WEB_FORM: 'Formular site',
-};
 
 /** Statusuri care înseamnă că pitch-ul a plecat deja. */
 const PITCHED_STATUSES = new Set(['sent', 'replied', 'negotiating', 'won', 'lost']);

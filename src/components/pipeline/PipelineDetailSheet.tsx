@@ -1,13 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Copy, ExternalLink, Loader2, Check, X } from 'lucide-react';
+import { ExternalLink, Loader2, Check, Pencil, X, Trash2, Sparkles, Link as LinkIcon, Copy } from 'lucide-react';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import type { Lead } from '@/services/leads/types';
 import type { PipelineEvent, PipelineScoreDetails } from '@/services/pipeline/types';
 import { PIPELINE_STAGES, STAGE_LABELS } from '@/services/pipeline/stages';
+import { LeadComposer } from '@/components/messages/LeadComposer';
+import { LeadDetailsForm } from '@/components/leads/LeadDetailsForm';
+import { LeadNotesPanel } from '@/components/leads/LeadNotesPanel';
 import { StageBadge } from './StageBadge';
 
 interface PipelineDetail {
@@ -19,17 +23,10 @@ interface PipelineDetailSheetProps {
   /** Lead-ul deschis; `null` închide fișa. */
   leadId: string | null;
   onClose: () => void;
-  /** Apelat după schimbarea etapei, ca lista să se resincronizeze. */
+  /** Apelat după orice schimbare (etapă, detalii, ștergere), ca lista să se resincronizeze. */
   onUpdated: () => void;
 }
 
-const dateTimeFormatter = new Intl.DateTimeFormat('ro-RO', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 /** Linkurile importate pot veni fără schemă („instagram.com/x" sau doar „x"). */
 function externalUrl(value: string, base?: string): string {
@@ -43,30 +40,38 @@ export function PipelineDetailSheet({ leadId, onClose, onUpdated }: PipelineDeta
   const [loading, setLoading] = useState(false);
   const [stage, setStage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [amountEur, setAmountEur] = useState('');
+  const [creatingLink, setCreatingLink] = useState(false);
+
+  const load = useCallback(async (id: string, signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/pipeline/manage/${id}`, { signal });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Nu am putut încărca lead-ul');
+      setDetail(data as PipelineDetail);
+      setStage((data as PipelineDetail).lead.pipeline_stage ?? '');
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      toast.error(err instanceof Error ? err.message : 'Nu am putut încărca lead-ul');
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
+    setEditing(false);
     if (!leadId) {
       setDetail(null);
       return;
     }
     const controller = new AbortController();
-    setLoading(true);
-    (async () => {
-      try {
-        const res = await fetch(`/api/pipeline/manage/${leadId}`, { signal: controller.signal });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Nu am putut încărca lead-ul');
-        setDetail(data as PipelineDetail);
-        setStage((data as PipelineDetail).lead.pipeline_stage ?? '');
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return;
-        toast.error(err instanceof Error ? err.message : 'Nu am putut încărca lead-ul');
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    })();
+    load(leadId, controller.signal);
     return () => controller.abort();
-  }, [leadId]);
+  }, [leadId, load]);
 
   async function handleSaveStage() {
     if (!detail || !stage || stage === detail.lead.pipeline_stage) return;
@@ -90,6 +95,72 @@ export function PipelineDetailSheet({ leadId, onClose, onUpdated }: PipelineDeta
     }
   }
 
+  /** Lead-ul actualizat de un endpoint din /api/leads: fișa și lista se resincronizează. */
+  function applyLead(updated: Lead) {
+    setDetail((prev) => (prev ? { ...prev, lead: updated } : prev));
+    onUpdated();
+  }
+
+  async function handleDelete() {
+    if (!detail) return;
+    const name = detail.lead.company_name;
+    // Ștergerea e definitivă și nu are „undo", deci cerem o confirmare explicită
+    if (!window.confirm(`Ștergi definitiv lead-ul „${name}"?\n\nDispar și istoricul, notele și pașii lui de outreach. Acțiunea nu poate fi anulată.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/leads/${detail.lead.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Eroare la ștergere');
+      toast.success(`Lead-ul „${name}" a fost șters.`);
+      onClose();
+      onUpdated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Eroare la ștergere');
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function handleGeneratePitch() {
+    if (!detail) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/leads/${detail.lead.id}/pitch`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Eroare la generarea pitch-ului');
+      applyLead(data.lead as Lead);
+      toast.success('Pitch generat — revizuiește-l înainte de trimitere.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Eroare la generarea pitch-ului');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleCreatePaymentLink() {
+    if (!detail) return;
+    const amount = Number(amountEur);
+    if (!amount || amount <= 0) {
+      toast.error('Introdu o sumă validă în EUR.');
+      return;
+    }
+    setCreatingLink(true);
+    try {
+      const res = await fetch(`/api/leads/${detail.lead.id}/payment-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountEur: amount }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Eroare la generarea link-ului');
+      applyLead(data.lead as Lead);
+      toast.success('Link de plată generat.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Eroare la generarea link-ului');
+    } finally {
+      setCreatingLink(false);
+    }
+  }
+
   const lead = detail?.lead;
   // Lead-urile din pipeline au în score_details forma PipelineScoreDetails
   const details = (lead?.score_details ?? null) as unknown as Partial<PipelineScoreDetails> | null;
@@ -104,10 +175,27 @@ export function PipelineDetailSheet({ leadId, onClose, onUpdated }: PipelineDeta
         className="w-full sm:max-w-xl bg-stone-900 border-stone-800/60 text-stone-100 overflow-y-auto gap-0"
       >
         <SheetHeader className="border-b border-stone-800/60 pr-12">
-          <SheetTitle className="text-stone-100">{lead?.company_name ?? 'Lead'}</SheetTitle>
-          <SheetDescription className="text-stone-500">
-            {lead ? [lead.niche, lead.location, lead.source_ref].filter(Boolean).join(' · ') : 'Se încarcă...'}
-          </SheetDescription>
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <SheetTitle className="text-stone-100 truncate">{lead?.company_name ?? 'Lead'}</SheetTitle>
+              <SheetDescription className="text-stone-500">
+                {lead ? [lead.niche, lead.location, lead.source_ref].filter(Boolean).join(' · ') : 'Se încarcă...'}
+              </SheetDescription>
+            </div>
+            {lead && (
+              <Button
+                size="sm"
+                variant="outline"
+                title="Șterge lead-ul"
+                disabled={deleting}
+                onClick={handleDelete}
+                className="shrink-0 text-red-400 hover:text-red-300 hover:border-red-500/40"
+              >
+                {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                Șterge
+              </Button>
+            )}
+          </div>
         </SheetHeader>
 
         {loading && !lead ? (
@@ -147,8 +235,34 @@ export function PipelineDetailSheet({ leadId, onClose, onUpdated }: PipelineDeta
                 </Button>
               </div>
               <p className="text-[11px] text-stone-600">
-                Etapa nu coboară. Câștigat, Pierdut și Nu contacta se pot seta oricând.
+                Etapa nu coboară. Câștigat, Pierdut și Nu contacta se pot seta oricând, iar o etapă finală se poate corecta în oricare alta.
               </p>
+            </section>
+
+            {/* Detalii editabile: nume, site, contact, note */}
+            <section className="space-y-2">
+              <div className="flex items-center">
+                <SectionTitle>Detalii firmă și contact</SectionTitle>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEditing((v) => !v)}
+                  className="ml-auto h-7 text-xs text-stone-400 hover:text-stone-200"
+                >
+                  {editing ? <X /> : <Pencil />}
+                  {editing ? 'Închide' : 'Editează'}
+                </Button>
+              </div>
+              {editing && (
+                <LeadDetailsForm
+                  key={lead.id}
+                  lead={lead}
+                  onUpdated={(updated) => {
+                    setDetail((prev) => (prev ? { ...prev, lead: updated } : prev));
+                    onUpdated();
+                  }}
+                />
+              )}
             </section>
 
             {/* Semnale */}
@@ -210,48 +324,86 @@ export function PipelineDetailSheet({ leadId, onClose, onUpdated }: PipelineDeta
                 {lead.contact_email && <InfoRow label="Email" text={lead.contact_email} />}
                 {lead.contact_phone && <InfoRow label="Telefon" text={lead.contact_phone} />}
                 {lead.address && <InfoRow label="Adresă" text={lead.address} />}
+                {lead.rating !== null && (
+                  <InfoRow
+                    label="Rating"
+                    text={`★ ${Number(lead.rating).toFixed(1)}${lead.reviews_count !== null ? ` (${lead.reviews_count} recenzii)` : ''}`}
+                  />
+                )}
               </div>
             </section>
 
-            {/* Mesaje generate */}
+            {/* Trimite un mesaj: canal, template / mesaj AI, editare, ajustare AI */}
             <section className="space-y-3">
-              <SectionTitle>Mesaje generate</SectionTitle>
-              <CopyBlock label="Subiect email" value={lead.pitch_subject} />
-              <CopyBlock label="Email" value={lead.pitch_generated} multiline />
-              <CopyBlock label="DM LinkedIn" value={details?.linkedinDm ?? null} multiline />
-              <CopyBlock label="DM Instagram" value={details?.instagramDm ?? null} multiline />
+              <SectionTitle>Trimite un mesaj</SectionTitle>
+              {!lead.pitch_generated && (
+                <div className="flex items-center gap-3 rounded-lg border border-stone-800/60 bg-stone-950/40 px-3 py-2">
+                  <p className="flex-1 text-xs text-stone-500">Lead-ul nu are încă un pitch AI.</p>
+                  <Button size="sm" variant="outline" disabled={generating} onClick={handleGeneratePitch}>
+                    {generating ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                    Generează pitch
+                  </Button>
+                </div>
+              )}
+              <LeadComposer
+                lead={lead}
+                onChanged={() => {
+                  load(lead.id);
+                  onUpdated();
+                }}
+              />
             </section>
 
-            {/* Istoric */}
+            {/* Link de plată: după consultanță, când prețul e confirmat (status „negotiating”) */}
             <section className="space-y-2">
-              <SectionTitle>Istoric evenimente</SectionTitle>
-              {detail.events.length === 0 ? (
-                <p className="text-xs text-stone-600">Niciun eveniment încă.</p>
+              <SectionTitle>Link de plată</SectionTitle>
+              {lead.payment_link ? (
+                <div className="flex items-center gap-2 bg-stone-950/60 border border-stone-800 rounded-lg p-2">
+                  <LinkIcon size={14} className="text-amber-400 shrink-0" />
+                  <span className="text-xs text-stone-300 truncate flex-1">{lead.payment_link}</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(lead.payment_link!);
+                      toast.success('Link copiat.');
+                    }}
+                    className="text-stone-500 hover:text-stone-300"
+                    aria-label="Copiază linkul"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
               ) : (
-                <ol className="space-y-2">
-                  {detail.events.map((event) => (
-                    <li key={event.id} className="rounded-lg border border-stone-800/60 bg-stone-950/40 p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium text-stone-200">
-                          {event.event}
-                          {event.channel && <span className="text-stone-500"> · {event.channel}</span>}
-                        </span>
-                        <span className="text-[11px] text-stone-600 whitespace-nowrap">
-                          {dateTimeFormatter.format(new Date(event.occurred_at))}
-                        </span>
-                      </div>
-                      {event.stage && (
-                        <div className="mt-1.5">
-                          <StageBadge stage={event.stage} />
-                        </div>
-                      )}
-                      {event.reply_text && (
-                        <p className="mt-2 text-xs text-stone-400 whitespace-pre-wrap">{event.reply_text}</p>
-                      )}
-                    </li>
-                  ))}
-                </ol>
+                <>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="Sumă (EUR)"
+                      value={amountEur}
+                      onChange={(e) => setAmountEur(e.target.value)}
+                      disabled={lead.status !== 'negotiating'}
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={creatingLink || lead.status !== 'negotiating'}
+                      onClick={handleCreatePaymentLink}
+                    >
+                      {creatingLink ? <Loader2 className="animate-spin" /> : <LinkIcon />}
+                      Generează link
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-stone-600">
+                    Disponibil din etapele Call programat, Call făcut și Ofertă (status „negotiating”), după ce prețul a fost confirmat.
+                  </p>
+                </>
               )}
+            </section>
+
+            {/* Istoric: conversația pe toate canalele, evenimentele și notele (ca în /leads) */}
+            <section className="space-y-2">
+              <SectionTitle>Istoric</SectionTitle>
+              {/* Cheia reîncarcă istoricul după orice schimbare a lead-ului (etapă, detalii) */}
+              <LeadNotesPanel key={`${lead.id}:${lead.updated_at}`} leadId={lead.id} />
             </section>
           </div>
         ) : null}
@@ -302,41 +454,6 @@ function InfoRow({ label, text }: { label: string; text: string }) {
     <div className="flex items-center gap-2">
       <span className="w-20 shrink-0 text-xs text-stone-500">{label}</span>
       <span className="text-stone-300 break-all">{text}</span>
-    </div>
-  );
-}
-
-function CopyBlock({ label, value, multiline }: { label: string; value: string | null; multiline?: boolean }) {
-  async function copy() {
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      toast.success(`${label} copiat`);
-    } catch {
-      toast.error('Nu am putut copia în clipboard');
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-stone-800/60 bg-stone-950/40 p-3">
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="text-xs font-medium text-stone-400">{label}</span>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={copy}
-          disabled={!value}
-          className="h-7 px-2 text-stone-400 hover:text-stone-100 hover:bg-stone-800"
-        >
-          <Copy size={13} />
-          Copiază
-        </Button>
-      </div>
-      {value ? (
-        <p className={`text-sm text-stone-200 ${multiline ? 'whitespace-pre-wrap leading-relaxed' : ''}`}>{value}</p>
-      ) : (
-        <p className="text-xs text-stone-600">—</p>
-      )}
     </div>
   );
 }

@@ -10,9 +10,9 @@ export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
 /** Canale care pot fi scrise în jurnal (constrângerea CHECK din DB). */
-const CHANNELS = ['email', 'sms', 'whatsapp'] as const;
-/** La citire se poate filtra și pe `instagram`, care vine din leads.pitch_channel. */
-const FILTERABLE_CHANNELS: readonly string[] = [...CHANNELS, 'instagram'];
+const CHANNELS = ['email', 'sms', 'whatsapp', 'instagram', 'facebook', 'linkedin'] as const;
+/** La citire se filtrează pe aceleași canale (instagram vine și din leads.pitch_channel). */
+const FILTERABLE_CHANNELS: readonly string[] = CHANNELS;
 const RECIPIENT_TYPES = ['lead', 'client'] as const;
 
 const asChannel = (value: string | null): MessageChannel | null =>

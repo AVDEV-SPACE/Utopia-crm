@@ -148,6 +148,8 @@ export async function GET(request: Request) {
       `,
     ]);
 
+    const outreach = await outreachMonth();
+
     const bm = bookingsMetrics[0] ?? {};
     const cm = chatMetrics[0]    ?? {};
     const pt = pitchedResult[0]  ?? {};
@@ -177,6 +179,7 @@ export async function GET(request: Request) {
         leadsTotal: Number(pt.leads_total ?? 0),
       },
       pitchedTrend: pitchedTrendResult.map(r => Number(r.cumulative)),
+      outreach,
       activityPeriod,
       activityBucket: act.unit,
       activity: activityResult.map(r => ({
@@ -198,4 +201,104 @@ export async function GET(request: Request) {
     console.error('Error fetching overview data:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+// ─── Outreach-ul lunii (cardul „Pitched”) ──────────────────────────────────
+
+/** Zilele se numără în ora României: o trimitere la 01:00 nu cade pe ziua de ieri. */
+const TZ = 'Europe/Bucharest';
+
+/** Fără setarea din DB (migrarea neaplicată), ținta implicită. */
+const DEFAULT_DAILY_TARGET = 40;
+
+/** Etapele / statusurile care înseamnă că lead-ul a răspuns (pe un canal manual nu avem alt semnal). */
+const REPLIED_STAGES = ['REPLIED', 'INTERESTED', 'CALL_BOOKED', 'CALL_DONE', 'PROPOSAL', 'WON'];
+const REPLIED_STATUSES = ['replied', 'negotiating', 'won'];
+
+interface OutreachChannelStats {
+  channel: string;
+  /** Mesaje trimise luna asta */
+  messages: number;
+  /** Lead-uri distincte contactate luna asta */
+  leads: number;
+  replied: number;
+  failed: number;
+}
+
+/**
+ * Trimiterile către lead-uri (toate canalele, manuale și automate) pe fiecare
+ * zi a lunii curente, ținta zilnică și răspunsurile pe canal. Răspunsul pe email
+ * vine din sincronizarea Gmail (`replied_at`); pe celelalte canale, din etapa
+ * lead-ului (marcată manual sau de inbox-ul Meta).
+ */
+async function outreachMonth() {
+  const [target, days, channels, opens] = await Promise.all([
+    sql`SELECT daily_target FROM outreach_settings WHERE id = 1`
+      .then(rows => Number((rows[0] as { daily_target?: number } | undefined)?.daily_target ?? DEFAULT_DAILY_TARGET))
+      .catch(() => DEFAULT_DAILY_TARGET),
+
+    sql`
+      WITH bounds AS (
+        SELECT date_trunc('month', now() AT TIME ZONE ${TZ})::date AS m0
+      ),
+      days AS (
+        SELECT g::date AS d
+        FROM bounds, generate_series(m0, (m0 + INTERVAL '1 month' - INTERVAL '1 day')::date, INTERVAL '1 day') AS g
+      ),
+      sent AS (
+        SELECT (created_at AT TIME ZONE ${TZ})::date AS d, COUNT(*) AS n
+        FROM sent_messages, bounds
+        WHERE recipient_type = 'lead' AND status = 'sent' AND created_at >= (m0::timestamp AT TIME ZONE ${TZ})
+        GROUP BY 1
+      )
+      SELECT days.d::text AS date, COALESCE(sent.n, 0) AS sent, days.d = (now() AT TIME ZONE ${TZ})::date AS is_today
+      FROM days LEFT JOIN sent ON sent.d = days.d
+      ORDER BY days.d
+    `.catch(err => { console.error('Overview outreach error:', err); return []; }),
+
+    sql`
+      SELECT
+        s.channel,
+        COUNT(*) FILTER (WHERE s.status = 'sent')                                   AS messages,
+        COUNT(DISTINCT s.lead_id) FILTER (WHERE s.status = 'sent')                  AS leads,
+        COUNT(DISTINCT s.lead_id) FILTER (
+          WHERE s.status = 'sent' AND (
+            (s.channel = 'email' AND s.replied_at IS NOT NULL)
+            OR (s.channel <> 'email' AND (l.pipeline_stage = ANY(${REPLIED_STAGES}::text[]) OR l.status::text = ANY(${REPLIED_STATUSES}::text[])))
+          )
+        )                                                                           AS replied,
+        COUNT(*) FILTER (WHERE s.status = 'failed')                                 AS failed
+      FROM sent_messages s
+      LEFT JOIN leads l ON l.id = s.lead_id
+      WHERE s.recipient_type = 'lead'
+        AND s.created_at >= (date_trunc('month', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ})
+      GROUP BY s.channel
+      ORDER BY messages DESC
+    `.catch(err => { console.error('Overview outreach channels error:', err); return []; }),
+
+    // Deschiderile emailurilor automate (pixel) — opțional, tabela poate lipsi
+    sql`
+      SELECT COUNT(*) AS n FROM outreach_tasks
+      WHERE channel = 'email' AND opened_at >= (date_trunc('month', now() AT TIME ZONE ${TZ}) AT TIME ZONE ${TZ})
+    `.then(rows => Number((rows[0] as { n?: number } | undefined)?.n ?? 0)).catch(() => 0),
+  ]);
+
+  const series = days.map(r => ({ date: String(r.date), sent: Number(r.sent), isToday: Boolean(r.is_today) }));
+  const todayIndex = series.findIndex(d => d.isToday);
+  return {
+    dailyTarget: target,
+    daysInMonth: series.length,
+    dayOfMonth: todayIndex + 1,
+    today: todayIndex >= 0 ? series[todayIndex].sent : 0,
+    month: series.reduce((s, d) => s + d.sent, 0),
+    days: series.map(({ date, sent }) => ({ date, sent })),
+    emailOpens: opens,
+    channels: channels.map(r => ({
+      channel: String(r.channel),
+      messages: Number(r.messages),
+      leads: Number(r.leads),
+      replied: Number(r.replied),
+      failed: Number(r.failed),
+    })) as OutreachChannelStats[],
+  };
 }

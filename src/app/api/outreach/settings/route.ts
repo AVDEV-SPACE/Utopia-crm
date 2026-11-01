@@ -46,6 +46,7 @@ const bodySchema = z.object({
   step1_template_id: templateId,
   step2_template_id: templateId,
   step3_template_id: templateId,
+  daily_target: z.number().int().min(0).max(1000).optional(),
 });
 
 export async function PUT(req: NextRequest) {
@@ -58,7 +59,8 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    const ids = Object.values(parsed.data).filter((id): id is number => id !== null);
+    const { step1_template_id, step2_template_id, step3_template_id } = parsed.data;
+    const ids = [step1_template_id, step2_template_id, step3_template_id].filter((id): id is number => id !== null);
     const found = await getTemplates(ids);
     const missing = ids.filter((id) => !found.has(id));
     if (missing.length > 0) {

@@ -206,11 +206,15 @@ async function findLeadForEvent(key: string | null, email: string | null): Promi
  * Întoarce etapa rezultată, sau `null` dacă etapa s-a schimbat concurent și
  * trebuie reîncercat.
  */
-async function advanceLead(lead: Lead, incoming: string | null, at: Date): Promise<string | null> {
+async function advanceLead(lead: Lead, incoming: string | null, at: Date, reopen = false): Promise<string | null> {
   const previousStage = lead.pipeline_stage;
   // Fără etapă în eveniment nu atingem nici etapa, nici statusul: un lead din
   // alte surse (potrivit după email) nu trebuie să primească o etapă implicită.
-  const stage = incoming ? resolveStage(previousStage, incoming) : previousStage;
+  const stage = !incoming
+    ? previousStage
+    : reopen && previousStage === 'LOST'
+      ? incoming
+      : resolveStage(previousStage, incoming);
   const status: LeadStatus = stage !== previousStage ? statusForStage(stage) : lead.status;
 
   const rows = await sql`
@@ -253,7 +257,7 @@ export async function logPipelineEvent(input: PipelineEventInput, leadId?: strin
 
   for (let attempt = 0; lead && attempt < MAX_ATTEMPTS; attempt++) {
     previousStage = lead.pipeline_stage;
-    const result = await advanceLead(lead, input.stage, at);
+    const result = await advanceLead(lead, input.stage, at, input.reopen);
     if (result !== null) {
       stage = result || null;
       break;
@@ -277,8 +281,9 @@ export type ManualStageResult =
 
 /**
  * Etapă setată manual din /pipeline. Respectă `resolveStage` (nu coboară), cu
- * o excepție: WON / LOST / DO_NOT_CONTACT se pot seta explicit oricând — sunt
- * decizii ale omului, inclusiv corectarea unei finale greșite.
+ * excepții: WON / LOST / DO_NOT_CONTACT se pot seta explicit oricând, iar o
+ * etapă finală se poate corecta în oricare alta — sunt decizii ale omului (ex.
+ * un răspuns clasificat greșit de AI ca refuz).
  */
 export async function setManualStage(
   id: string,
@@ -289,7 +294,8 @@ export async function setManualStage(
   if (!lead) return { ok: false, reason: 'not_found' };
 
   const previousStage = lead.pipeline_stage;
-  const next = TERMINAL_STAGES.has(stage) ? stage : resolveStage(previousStage, stage);
+  const correction = TERMINAL_STAGES.has(stage) || (previousStage !== null && TERMINAL_STAGES.has(previousStage));
+  const next = correction ? stage : resolveStage(previousStage, stage);
   if (next !== stage) return { ok: false, reason: 'downgrade' };
 
   const status: LeadStatus = next !== previousStage ? statusForStage(next) : lead.status;
@@ -316,22 +322,35 @@ export async function setManualStage(
   return { ok: true, lead: updated, previousStage };
 }
 
-/** Lista din /pipeline: filtre + paginare + KPI + fațete, în paralel. */
+/**
+ * Lista din /pipeline — toate leadurile din CRM (motor, import CSV, Google
+ * Sheet, Lead Generation, site, apeluri): filtre + paginare + KPI + fațete, în paralel.
+ */
 export async function listPipelineLeads(filters: PipelineFilters = {}): Promise<PipelinePage> {
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
   const offset = Math.max(filters.offset ?? 0, 0);
 
-  const params: unknown[] = [PIPELINE_SOURCES];
+  const params: unknown[] = [];
   const push = (value: unknown): string => {
     params.push(value);
     return `$${params.length}`;
   };
-  const where: string[] = ['source = ANY($1::text[])'];
+  const where: string[] = ['TRUE'];
 
+  if (filters.source) where.push(`source = ${push(filters.source)}`);
   if (filters.stage) where.push(`pipeline_stage = ${push(filters.stage)}`);
   if (filters.segment) where.push(`segment = ${push(filters.segment)}`);
   if (typeof filters.icp === 'boolean') where.push(`icp_match IS ${filters.icp ? 'TRUE' : 'NOT TRUE'}`);
   if (filters.city) where.push(`location = ${push(filters.city)}`);
+  if (filters.niche) where.push(`niche = ${push(filters.niche)}`);
+  if (filters.category) where.push(`category = ${push(filters.category)}`);
+  if (filters.withoutRating) where.push('rating IS NULL');
+  else if (filters.minRating !== undefined) where.push(`rating >= ${push(filters.minRating)}`);
+  if (filters.withoutScore) where.push('score IS NULL');
+  else {
+    if (filters.minScore !== undefined) where.push(`score >= ${push(filters.minScore)}`);
+    if (filters.maxScore !== undefined) where.push(`score <= ${push(filters.maxScore)}`);
+  }
 
   const term = filters.q?.trim();
   if (term) {
@@ -342,6 +361,8 @@ export async function listPipelineLeads(filters: PipelineFilters = {}): Promise<
         OR niche ILIKE ${like}
         OR contact_email ILIKE ${like}
         OR website ILIKE ${like}
+        OR contact_phone ILIKE ${like}
+        OR address ILIKE ${like}
         OR source_ref ILIKE ${like})`
     );
   }
@@ -375,15 +396,16 @@ export async function listPipelineLeads(filters: PipelineFilters = {}): Promise<
         count(*) FILTER (WHERE pipeline_stage = 'CALL_BOOKED')::int            AS call_booked,
         count(*) FILTER (WHERE pipeline_stage = 'WON')::int                    AS won
       FROM leads
-      WHERE source = ANY(${PIPELINE_SOURCES}::text[])
     `,
     sql`
       SELECT
         array_remove(array_agg(DISTINCT location), NULL)       AS cities,
         array_remove(array_agg(DISTINCT segment), NULL)        AS segments,
-        array_remove(array_agg(DISTINCT pipeline_stage), NULL) AS stages
+        array_remove(array_agg(DISTINCT pipeline_stage), NULL) AS stages,
+        array_remove(array_agg(DISTINCT niche), NULL)          AS niches,
+        array_remove(array_agg(DISTINCT category), NULL)       AS categories,
+        array_remove(array_agg(DISTINCT source), NULL)         AS sources
       FROM leads
-      WHERE source = ANY(${PIPELINE_SOURCES}::text[])
     `,
   ]);
 
@@ -406,6 +428,9 @@ export async function listPipelineLeads(filters: PipelineFilters = {}): Promise<
     cities: sorted(f.cities),
     segments: sorted(f.segments),
     stages: sorted(f.stages),
+    niches: sorted(f.niches),
+    categories: sorted(f.categories),
+    sources: sorted(f.sources),
   };
 
   return {

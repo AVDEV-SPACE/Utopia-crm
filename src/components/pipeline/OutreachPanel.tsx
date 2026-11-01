@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ChevronDown, Eye, Loader2, Mail, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { EmailPreview } from '@/components/messages/EmailPreview';
 import type { OutreachSettings } from '@/services/outreach/types';
 
 interface Template {
@@ -54,6 +55,7 @@ export function OutreachPanel() {
   const [open, setOpen] = useState(false);
   const [choices, setChoices] = useState<Choices>({ 1: null, 2: null, 3: null });
   const [saving, setSaving] = useState(false);
+  const [dailyTarget, setDailyTarget] = useState('');
 
   const [previewStep, setPreviewStep] = useState<Step>(1);
   const [previewLead, setPreviewLead] = useState('');
@@ -70,6 +72,7 @@ export function OutreachPanel() {
       const next = data as OutreachState;
       setState(next);
       setChoices(toChoices(next.settings));
+      setDailyTarget(String(next.settings.daily_target));
       setError(null);
       if (templatesRes.ok) setTemplates((await templatesRes.json()) as Template[]);
     } catch (err) {
@@ -114,11 +117,17 @@ export function OutreachPanel() {
       const res = await fetch('/api/outreach/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ step1_template_id: choices[1], step2_template_id: choices[2], step3_template_id: choices[3] }),
+        body: JSON.stringify({
+          step1_template_id: choices[1],
+          step2_template_id: choices[2],
+          step3_template_id: choices[3],
+          // Doar dacă s-a schimbat: înainte de migrare coloana lipsește
+          daily_target: targetChanged ? Number(dailyTarget) : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Nu am putut salva');
-      toast.success('Modelele secvenței au fost salvate — se aplică leadurilor planificate de acum');
+      toast.success('Setările outreach-ului au fost salvate — modelele se aplică leadurilor planificate de acum');
       load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Nu am putut salva');
@@ -128,7 +137,9 @@ export function OutreachPanel() {
   }
 
   const saved = state ? toChoices(state.settings) : null;
-  const dirty = saved !== null && STEPS.some(({ step }) => saved[step] !== choices[step]);
+  const targetValid = /^\d{1,4}$/.test(dailyTarget) && Number(dailyTarget) <= 1000;
+  const targetChanged = targetValid && Number(dailyTarget) !== state?.settings.daily_target;
+  const dirty = saved !== null && (STEPS.some(({ step }) => saved[step] !== choices[step]) || targetChanged);
   const status = state?.status;
 
   return (
@@ -194,9 +205,20 @@ export function OutreachPanel() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-2 text-xs text-stone-400">
+              Țintă outreach / zi
+              <input
+                value={dailyTarget}
+                onChange={(e) => setDailyTarget(e.target.value)}
+                inputMode="numeric"
+                aria-invalid={!targetValid}
+                title="Toate canalele; ținta lunii din Overview = ținta zilnică × zilele lunii"
+                className={`${inputClass} !w-20 !py-1.5 ${targetValid ? '' : '!border-red-500/60'}`}
+              />
+            </label>
             <Button size="sm" onClick={save} disabled={saving || !dirty} className="bg-amber-500 text-black hover:bg-amber-400">
               {saving && <Loader2 className="animate-spin" />}
-              Salvează modelele
+              Salvează
             </Button>
             <span className="text-[11px] text-stone-600">
               Placeholder-e în template: {'{{name}}'} (firma), {'{{oras}}'}, {'{{nisa}}'}. Follow-up-urile răspund în firul pasului 1 („Re: …”).
@@ -243,8 +265,9 @@ export function OutreachPanel() {
               </div>
               {preview?.note && <p className="px-3 pt-2 text-xs text-stone-400">{preview.note}</p>}
               {preview?.html ? (
-                // sandbox fără permisiuni: conținutul template-ului nu rulează scripturi și nu navighează
-                <iframe title="Preview email" sandbox="" srcDoc={preview.html} className="h-[420px] w-full rounded-b-lg bg-white" />
+                <div className="p-2">
+                  <EmailPreview html={preview.html} />
+                </div>
               ) : (
                 <div className="h-24" />
               )}

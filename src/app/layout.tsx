@@ -11,16 +11,12 @@ import { fontVariables } from "@/lib/fonts";
 export const metadata: Metadata = {
   title: "Utopia CRM",
   description: "Customer Relationship Management pentru Utopia",
-  // Iconițele din /public — declarate explicit, ca browserul să prefere SVG-ul
-  // (crisp la orice densitate) în loc să ghicească doar /favicon.ico
+  // Iconița din /public — declarată explicit, ca browserul să folosească SVG-ul
+  // (crisp la orice densitate) în loc să ghicească /favicon.ico
   icons: {
-    icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/favicon-96x96.png", type: "image/png", sizes: "96x96" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
-    shortcut: "/favicon.ico",
-    apple: "/favicon-96x96.png",
+    icon: [{ url: "/utopia-icon.svg", type: "image/svg+xml" }],
+    shortcut: "/utopia-icon.svg",
+    apple: "/utopia-icon.svg",
   },
 };
 

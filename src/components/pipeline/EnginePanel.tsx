@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronDown, Cpu, Loader2, Play, Sparkles, Upload } from 'lucide-react';
+import { ChevronDown, Cpu, Loader2, Play, Sparkles, Square, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { MultiValueInput } from './MultiValueInput';
 import type { EngineRun, EngineSettings, EngineStats } from '@/services/engine/types';
 import { KNOWN_NICHES } from '@/services/leads/osm-categories';
 import { RO_CITIES } from '@/services/leads/ro-cities';
@@ -17,8 +18,21 @@ interface EngineState {
 }
 
 interface EnginePanelProps {
-  /** Apelat după o rulare sau un import, ca lista din /pipeline să se reîncarce. */
+  /** Apelat după o rulare sau un import, ca lista paginii (/pipeline, /leads) să se reîncarce. */
   onChanged: () => void;
+}
+
+/** Plafonul de combinații nișă × oraș dintr-o rulare manuală (fiecare e o căutare separată). */
+const MAX_PAIRS = 25;
+
+interface DiscoverResponse {
+  niche: string | null;
+  city: string | null;
+  found: number;
+  inserted: number;
+  duplicates: number;
+  errors?: string[];
+  skipped?: string;
 }
 
 const timeFormatter = new Intl.DateTimeFormat('ro-RO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -41,13 +55,21 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
   const [maxNew, setMaxNew] = useState('');
   const [batch, setBatch] = useState('8');
   const [minScore, setMinScore] = useState('50');
-  // Perechea pentru o rulare discover manuală; ambele goale = rotația din setări
-  const [targetNiche, setTargetNiche] = useState('');
-  const [targetCity, setTargetCity] = useState('');
+  // Nișele și orașele unei rulări discover manuale (fiecare combinație); ambele goale = rotația din setări
+  const [targetNiches, setTargetNiches] = useState<string[]>([]);
+  const [targetCities, setTargetCities] = useState<string[]>([]);
+  const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
+  const stopRequested = useRef(false);
+  // Fără rolul de owner (ex. asistentul în /leads), panoul nu se arată
+  const [forbidden, setForbidden] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/engine/settings');
+      if (res.status === 401 || res.status === 403) {
+        setForbidden(true);
+        return;
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Nu am putut încărca motorul');
       const next = data as EngineState;
@@ -66,33 +88,22 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
     load();
   }, [load]);
 
-  async function run(kind: 'discover' | 'enrich') {
-    const niche = targetNiche.trim();
-    const city = targetCity.trim();
-    if (kind === 'discover' && Boolean(niche) !== Boolean(city)) {
-      toast.error('Completează și nișa, și orașul — sau lasă-le goale pentru rotația din setări');
-      return;
-    }
+  async function post(body: Record<string, string>) {
+    const res = await fetch('/api/engine/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Rularea a eșuat');
+    return data;
+  }
 
-    setRunning(kind);
+  async function runEnrich() {
+    setRunning('enrich');
     try {
-      const res = await fetch('/api/engine/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(kind === 'discover' && niche ? { kind, niche, city } : { kind }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Rularea a eșuat');
-
-      if (kind === 'discover') {
-        toast.success(
-          data.skipped
-            ? `Discover sărit: ${data.skipped}`
-            : `${data.niche} × ${data.city}: ${data.found} găsiți, ${data.inserted} noi, ${data.duplicates} duplicate`
-        );
-      } else {
-        toast.success(`Enrich: ${data.processed} lead-uri procesate`);
-      }
+      const data = await post({ kind: 'enrich' });
+      toast.success(`ICP score: ${data.processed} lead-uri procesate`);
       if (data.errors?.length) toast.warning(data.errors.slice(0, 3).join(' · '));
       onChanged();
       load();
@@ -100,6 +111,73 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
       toast.error(err instanceof Error ? err.message : 'Rularea a eșuat');
     } finally {
       setRunning(null);
+    }
+  }
+
+  /**
+   * Discover pe fiecare combinație nișă × oraș, câte o cerere pe rând (fiecare
+   * căutare durează; așa nicio cerere nu atinge limita de timp a serverului).
+   * Se oprește la plafonul zilnic sau la „Oprește”.
+   */
+  async function runDiscover() {
+    if ((targetNiches.length === 0) !== (targetCities.length === 0)) {
+      toast.error('Alege cel puțin o nișă și un oraș — sau lasă-le goale pentru rotația din setări');
+      return;
+    }
+    const pairs = targetNiches.flatMap((niche) => targetCities.map((city) => ({ niche, city })));
+    if (pairs.length > MAX_PAIRS) {
+      toast.error(`${pairs.length} combinații nișă × oraș — maximum ${MAX_PAIRS} pe rulare`);
+      return;
+    }
+
+    setRunning('discover');
+    stopRequested.current = false;
+    const totals = { found: 0, inserted: 0, duplicates: 0 };
+    const errors: string[] = [];
+    let done = 0;
+    try {
+      if (pairs.length === 0) {
+        // Rotația: următoarea pereche din setări
+        const data = (await post({ kind: 'discover' })) as DiscoverResponse;
+        toast.success(
+          data.skipped
+            ? `New leads sărit: ${data.skipped}`
+            : `${data.niche} × ${data.city}: ${data.found} găsiți, ${data.inserted} noi, ${data.duplicates} duplicate`
+        );
+        if (data.errors?.length) toast.warning(data.errors.slice(0, 3).join(' · '));
+        return;
+      }
+
+      for (const pair of pairs) {
+        if (stopRequested.current) break;
+        setProgress({ done, total: pairs.length, current: `${pair.niche} × ${pair.city}` });
+        try {
+          const data = (await post({ kind: 'discover', ...pair })) as DiscoverResponse;
+          if (data.skipped) {
+            errors.unshift(`oprit: ${data.skipped}`);
+            break;
+          }
+          totals.found += data.found;
+          totals.inserted += data.inserted;
+          totals.duplicates += data.duplicates;
+          errors.push(...(data.errors ?? []).map((e) => `${pair.niche} × ${pair.city}: ${e}`));
+        } catch (err) {
+          errors.push(`${pair.niche} × ${pair.city}: ${err instanceof Error ? err.message : 'eroare'}`);
+        }
+        done++;
+        onChanged();
+      }
+      toast.success(
+        `New leads ${done}/${pairs.length} combinații: ${totals.found} găsiți, ${totals.inserted} noi, ${totals.duplicates} duplicate`
+      );
+      if (errors.length) toast.warning(errors.slice(0, 3).join(' · '));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Rularea a eșuat');
+    } finally {
+      setRunning(null);
+      setProgress(null);
+      onChanged();
+      load();
     }
   }
 
@@ -148,6 +226,7 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
   }
 
   const stats = state?.stats;
+  if (forbidden) return null;
 
   return (
     <section className="rounded-xl border border-stone-800/60 bg-stone-900/60">
@@ -168,47 +247,53 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
           </div>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <input
-            value={targetNiche}
-            onChange={(e) => setTargetNiche(e.target.value)}
-            list="engine-niches"
-            placeholder="Nișă (gol = rotație)"
-            aria-label="Nișă pentru discover"
-            maxLength={80}
-            className={`${inputClass} !w-44 !py-1.5 text-xs`}
-          />
-          <input
-            value={targetCity}
-            onChange={(e) => setTargetCity(e.target.value)}
-            list="engine-cities"
-            placeholder="Oraș"
-            aria-label="Oraș pentru discover"
-            maxLength={80}
-            className={`${inputClass} !w-36 !py-1.5 text-xs`}
-          />
-          <datalist id="engine-niches">
-            {[...new Set([...(state?.settings.niches ?? []), ...KNOWN_NICHES])].map((n) => (
-              <option key={n} value={n} />
-            ))}
-          </datalist>
-          <datalist id="engine-cities">
-            {[...new Set([...(state?.settings.cities ?? []), ...RO_CITIES])].map((c) => (
-              <option key={c} value={c} />
-            ))}
-          </datalist>
-          <Button size="sm" variant="outline" disabled={running !== null} onClick={() => run('discover')}>
-            {running === 'discover' ? <Loader2 className="animate-spin" /> : <Play />}
-            Rulează discover
-          </Button>
-          <Button size="sm" variant="outline" disabled={running !== null} onClick={() => run('enrich')}>
+          {running === 'discover' && progress ? (
+            <Button size="sm" variant="outline" onClick={() => { stopRequested.current = true; }}>
+              <Square />
+              Oprește
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" disabled={running !== null} onClick={runDiscover}>
+              {running === 'discover' ? <Loader2 className="animate-spin" /> : <Play />}
+              New leads
+            </Button>
+          )}
+          <Button size="sm" variant="outline" disabled={running !== null} onClick={runEnrich}>
             {running === 'enrich' ? <Loader2 className="animate-spin" /> : <Sparkles />}
-            Rulează enrich
+            ICP score
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setOpen((v) => !v)} className="text-stone-400 hover:text-stone-100 hover:bg-stone-800">
             Setări
             <ChevronDown className={`transition-transform ${open ? 'rotate-180' : ''}`} />
           </Button>
         </div>
+      </div>
+
+      {/* Ținta unei rulări discover: oricâte nișe și orașe, fiecare combinație e o căutare */}
+      <div className="grid gap-2 border-t border-stone-800/60 px-4 py-3 md:grid-cols-2">
+        <MultiValueInput
+          label="Nișe"
+          values={targetNiches}
+          onChange={setTargetNiches}
+          suggestions={[...new Set([...(state?.settings.niches ?? []), ...KNOWN_NICHES])]}
+          placeholder="Adaugă nișe (gol = rotația din setări)"
+          disabled={running !== null}
+        />
+        <MultiValueInput
+          label="Orașe"
+          values={targetCities}
+          onChange={setTargetCities}
+          suggestions={[...new Set([...(state?.settings.cities ?? []), ...RO_CITIES])]}
+          placeholder="Adaugă orașe"
+          disabled={running !== null}
+        />
+        <p className="text-[11px] text-stone-600 md:col-span-2">
+          {progress
+            ? `Rulează ${progress.done + 1}/${progress.total}: ${progress.current}...`
+            : targetNiches.length > 0 && targetCities.length > 0
+              ? `${targetNiches.length * targetCities.length} combinații nișă × oraș, rulate pe rând (maximum ${MAX_PAIRS}); plafonul zilnic de leaduri noi se aplică.`
+              : 'Enter sau virgulă adaugă o valoare; alege din sugestii sau scrie liber.'}
+        </p>
       </div>
 
       {open && state && (

@@ -32,6 +32,8 @@ export interface OutreachSettings {
   step1_template_id: number | null;
   step2_template_id: number | null;
   step3_template_id: number | null;
+  /** Câte lead-uri vrei să contactezi pe zi (toate canalele) — ținta din cardul „Pitched” */
+  daily_target: number;
   updated_at: string;
 }
 
@@ -49,13 +51,26 @@ export type ReplyIntent =
   | 'objection'
   | 'not_interested'
   | 'unsubscribe'
-  | 'out_of_office';
+  | 'out_of_office'
+  | 'neutral';
+
+/** Publicul unei campanii de outreach (planificare manuală, din /pipeline sau /leads). */
+export interface CampaignFilters {
+  /** Nișe / orașe exacte (fără diferență de majuscule); goale = toate */
+  niches: string[];
+  cities: string[];
+  minScore: number | null;
+  /** Doar leadurile cu adresă de email (fără fallback pe DM-uri) */
+  emailOnly: boolean;
+}
 
 export interface PlanResult {
   candidates: number;
   planned: number;
   /** Leaduri sărite la rularea asta (AI indisponibil etc.) — se reiau la următoarea */
   deferred: number;
+  /** Id-urile leadurilor amânate (o campanie le sare la lotul următor) */
+  deferredIds?: string[];
   errors: string[];
   stoppedReason?: string;
 }

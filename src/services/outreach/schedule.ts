@@ -57,6 +57,17 @@ export function sendWindowBlock(now = new Date()): string | null {
   return null;
 }
 
+/**
+ * Lista de test (`OUTREACH_ALLOWED_RECIPIENTS`): dacă e setată, doar aceste
+ * adrese primesc emailuri și doar leadurile lor se planifică.
+ */
+export function allowedRecipients(): string[] {
+  return (process.env.OUTREACH_ALLOWED_RECIPIENTS ?? '')
+    .split(',')
+    .map((a) => a.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 /** Comutatorul general: fără `OUTREACH_SEND_ENABLED=true` nu pleacă niciun email. */
 export function isSendingEnabled(): boolean {
   return process.env.OUTREACH_SEND_ENABLED === 'true';

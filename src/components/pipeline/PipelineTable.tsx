@@ -1,14 +1,21 @@
 'use client';
 
 import { Loader2, Mail, Phone, Instagram, Check } from 'lucide-react';
+import { LEAD_STATUS_LABELS } from '@/services/leads/types';
 import type { PipelineLeadRow } from '@/services/pipeline/types';
 import { StageBadge } from './StageBadge';
 
-interface PipelineTableProps {
-  leads: PipelineLeadRow[];
+/**
+ * Tabelul de leaduri din /pipeline, folosit și de /leads (cu `showWebsite`).
+ * Click pe rând deschide fișa lead-ului.
+ */
+interface PipelineTableProps<T extends PipelineLeadRow> {
+  leads: T[];
   loading: boolean;
-  onOpen: (lead: PipelineLeadRow) => void;
+  onOpen: (lead: T) => void;
   emptyMessage?: string;
+  /** Coloana „Website”, după firmă */
+  showWebsite?: boolean;
 }
 
 function scoreColorClass(score: number | null): string {
@@ -20,12 +27,15 @@ function scoreColorClass(score: number | null): string {
 
 const dateFormatter = new Intl.DateTimeFormat('ro-RO', { day: '2-digit', month: 'short', year: 'numeric' });
 
-export function PipelineTable({ leads, loading, onOpen, emptyMessage }: PipelineTableProps) {
+/** Linkurile importate pot veni fără schemă. */
+const websiteHref = (value: string) => (/^https?:\/\//i.test(value) ? value : `https://${value}`);
+
+export function PipelineTable<T extends PipelineLeadRow>({ leads, loading, onOpen, emptyMessage, showWebsite = false }: PipelineTableProps<T>) {
   if (loading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center py-16 text-stone-500">
         <Loader2 className="animate-spin mr-2" size={16} />
-        <span className="text-sm">Se încarcă pipeline-ul...</span>
+        <span className="text-sm">Se încarcă lead-urile...</span>
       </div>
     );
   }
@@ -44,9 +54,9 @@ export function PipelineTable({ leads, loading, onOpen, emptyMessage }: Pipeline
         <thead>
           <tr className="border-b border-stone-800/60 text-left text-stone-500 text-xs uppercase tracking-wide">
             <th className="px-4 py-3 font-medium">Firmă</th>
+            {showWebsite && <th className="px-4 py-3 font-medium">Website</th>}
             <th className="px-4 py-3 font-medium">Nișă</th>
             <th className="px-4 py-3 font-medium">Oraș</th>
-            <th className="px-4 py-3 font-medium">Segment</th>
             <th className="px-4 py-3 font-medium">Scor</th>
             <th className="px-4 py-3 font-medium">ICP</th>
             <th className="px-4 py-3 font-medium">Etapă</th>
@@ -67,17 +77,27 @@ export function PipelineTable({ leads, loading, onOpen, emptyMessage }: Pipeline
                   {lead.source_ref ?? '—'}
                 </p>
               </td>
+              {showWebsite && (
+                <td className="px-4 py-3">
+                  {lead.website ? (
+                    // Linkul se deschide fără să deschidă și fișa rândului
+                    <a
+                      href={websiteHref(lead.website)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={lead.website}
+                      onClick={(e) => e.stopPropagation()}
+                      className="block max-w-[180px] truncate text-amber-400 hover:underline"
+                    >
+                      {lead.website.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')}
+                    </a>
+                  ) : (
+                    <span className="text-stone-600">—</span>
+                  )}
+                </td>
+              )}
               <td className="px-4 py-3 text-stone-400">{lead.niche ?? '—'}</td>
               <td className="px-4 py-3 text-stone-400">{lead.location ?? '—'}</td>
-              <td className="px-4 py-3">
-                {lead.segment ? (
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-stone-800/70 text-xs font-semibold text-stone-200">
-                    {lead.segment}
-                  </span>
-                ) : (
-                  <span className="text-stone-600">—</span>
-                )}
-              </td>
               <td className="px-4 py-3">
                 <span
                   className={`inline-flex items-center justify-center min-w-9 px-2 py-1 rounded-lg text-xs font-semibold ${scoreColorClass(lead.score)}`}
@@ -93,7 +113,12 @@ export function PipelineTable({ leads, loading, onOpen, emptyMessage }: Pipeline
                 )}
               </td>
               <td className="px-4 py-3">
-                <StageBadge stage={lead.pipeline_stage} />
+                {/* Leadurile din afara pipeline-ului (Sheet, site, apeluri) n-au etapă: arătăm statusul CRM */}
+                {lead.pipeline_stage ? (
+                  <StageBadge stage={lead.pipeline_stage} />
+                ) : (
+                  <span className="text-xs text-stone-400">{LEAD_STATUS_LABELS[lead.status] ?? lead.status}</span>
+                )}
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2 text-stone-500">

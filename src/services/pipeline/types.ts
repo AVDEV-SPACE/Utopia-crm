@@ -102,6 +102,11 @@ export interface PipelineEventInput {
   replyText: string | null;
   occurredAt: Date | null;
   payload: unknown;
+  /**
+   * Evenimentul poate scoate lead-ul din LOST (ex. un răspuns nou, de interes,
+   * după un refuz). DO_NOT_CONTACT și WON rămân finale.
+   */
+  reopen?: boolean;
 }
 
 export interface PipelineEventResult {
@@ -150,16 +155,27 @@ export type PipelineLeadRow = Pick<
 
 export interface PipelineFilters {
   q?: string;
+  /** O singură sursă (`leads.source`); lipsă = toate leadurile din CRM */
+  source?: string;
   stage?: string;
   segment?: string;
   icp?: boolean;
   city?: string;
+  niche?: string;
+  category?: string;
+  /** Nota Google minimă (0–5) / doar fără notă */
+  minRating?: number;
+  withoutRating?: boolean;
+  /** Scor minim / maxim (0–100) / doar fără scor */
+  minScore?: number;
+  maxScore?: number;
+  withoutScore?: boolean;
   sort?: 'score' | 'date';
   limit?: number;
   offset?: number;
 }
 
-/** Indicatorii de sus de pe /pipeline (peste toate lead-urile din pipeline, fără filtre). */
+/** Indicatorii de sus de pe /pipeline (peste toate lead-urile, fără filtre). */
 export interface PipelineKpi {
   total: number;
   icpMatch: number;
@@ -174,6 +190,9 @@ export interface PipelineFacets {
   cities: string[];
   segments: string[];
   stages: string[];
+  niches: string[];
+  categories: string[];
+  sources: string[];
 }
 
 export interface PipelinePage {

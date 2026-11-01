@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { X, Send, Loader2, Link as LinkIcon, Copy, MessageCircle } from 'lucide-react';
+import { Loader2, Link as LinkIcon, Copy, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { formatWhatsAppLink } from '@/lib/utils';
-import { logWhatsAppSend } from '@/lib/sent-messages-client';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { LeadComposer } from '@/components/messages/LeadComposer';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Lead, LeadStatus } from '@/services/leads/types';
@@ -31,25 +31,44 @@ interface LeadDetailDialogProps {
   initialTab?: LeadDialogTab;
   onClose: () => void;
   onUpdated: (lead: Lead) => void;
+  /** Generează pitch-ul AI (tab-ul Pitch, când lead-ul nu are încă unul). */
+  onGeneratePitch?: (lead: Lead) => void;
+  generating?: boolean;
+  /** Șterge definitiv lead-ul. Apelantul cere confirmarea. */
+  onDelete?: (lead: Lead) => void;
+  deleting?: boolean;
 }
 
+/** Fișa unui lead, ca panou lateral: detalii editabile, pitch și trimitere, istoric, mesaje. */
 export function LeadDetailDialog({
   lead,
   initialTab = 'details',
   onClose,
   onUpdated,
+  onGeneratePitch,
+  generating = false,
+  onDelete,
+  deleting = false,
 }: LeadDetailDialogProps) {
   const [tab, setTab] = useState<LeadDialogTab>(initialTab);
 
-  const [pitch, setPitch] = useState(lead.pitch_generated ?? '');
-  const [subject, setSubject] = useState(lead.pitch_subject ?? '');
   const [status, setStatus] = useState<LeadStatus>(lead.status);
   const [amountEur, setAmountEur] = useState('');
   const [saving, setSaving] = useState(false);
-  const [sending, setSending] = useState(false);
   const [creatingLink, setCreatingLink] = useState(false);
 
-  const canAutoSend = Boolean(lead.contact_email || lead.contact_phone);
+  // După o trimitere, statusul lead-ului se schimbă pe server
+  useEffect(() => setStatus(lead.status), [lead.status]);
+
+  /** Recitește lead-ul după o trimitere sau o salvare din compozitor. */
+  async function refresh() {
+    try {
+      const res = await fetch(`/api/leads/${lead.id}`);
+      if (res.ok) onUpdated((await res.json()) as Lead);
+    } catch {
+      // Lista se reîncarcă oricum la închiderea fișei
+    }
+  }
 
   async function patchLead(patch: Record<string, unknown>) {
     const res = await fetch(`/api/leads/${lead.id}`, {
@@ -65,40 +84,9 @@ export function LeadDetailDialog({
   async function handleSave() {
     setSaving(true);
     try {
-      const updated = await patchLead({ pitch_generated: pitch, pitch_subject: subject, status });
+      const updated = await patchLead({ status });
       onUpdated(updated);
-      toast.success('Lead actualizat.');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Eroare la salvare');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleSendNow() {
-    setSending(true);
-    try {
-      await patchLead({ pitch_generated: pitch, pitch_subject: subject });
-      const res = await fetch(`/api/leads/${lead.id}/send`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Eroare la trimitere');
-      setStatus('sent');
-      onUpdated(data.lead as Lead);
-      toast.success(`Pitch trimis prin ${lead.contact_email ? 'email' : 'SMS'}.`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Eroare la trimitere');
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function handleMarkSent() {
-    setSaving(true);
-    try {
-      const updated = await patchLead({ status: 'sent' });
-      setStatus('sent');
-      onUpdated(updated);
-      toast.success('Marcat ca trimis.');
+      toast.success('Status actualizat.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Eroare la salvare');
     } finally {
@@ -131,22 +119,36 @@ export function LeadDetailDialog({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6"
-        onClick={(e) => e.stopPropagation()}
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-2xl bg-stone-900 border-stone-800/60 text-stone-100 overflow-y-auto gap-0"
       >
-        <div className="flex items-start justify-between mb-4">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold text-stone-100 truncate">{lead.company_name}</h2>
-            <p className="text-xs text-stone-500">
-              {[lead.niche, lead.location].filter(Boolean).join(' · ') || 'fără nișă/locație'}
-            </p>
+        <SheetHeader className="border-b border-stone-800/60 pr-12">
+          <div className="flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <SheetTitle className="text-stone-100 truncate">{lead.company_name}</SheetTitle>
+              <SheetDescription className="text-stone-500">
+                {[lead.niche, lead.location].filter(Boolean).join(' · ') || 'fără nișă/locație'}
+              </SheetDescription>
+            </div>
+            {onDelete && (
+              <Button
+                size="sm"
+                variant="outline"
+                title="Șterge lead-ul"
+                disabled={deleting}
+                onClick={() => onDelete(lead)}
+                className="shrink-0 text-red-400 hover:text-red-300 hover:border-red-500/40"
+              >
+                {deleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                Șterge
+              </Button>
+            )}
           </div>
-          <button onClick={onClose} className="text-stone-500 hover:text-stone-300 shrink-0">
-            <X size={20} />
-          </button>
-        </div>
+        </SheetHeader>
+
+        <div className="p-4">
 
         {/* Tab-uri */}
         <div className="flex gap-1.5 mb-5">
@@ -178,29 +180,19 @@ export function LeadDetailDialog({
 
         {tab === 'pitch' && (
           <>
-            {lead.pitch_channel === 'email' && (
-              <div className="mb-4">
-                <Label className="text-xs text-stone-500 mb-1.5 block">Subiect email (hook)</Label>
-                <Input
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Subiect generat automat pe baza celei mai relevante probleme"
-                />
+            {!lead.pitch_generated && onGeneratePitch && (
+              <div className="mb-4 flex items-center gap-3 rounded-lg border border-stone-800/60 bg-stone-950/40 px-3 py-2">
+                <p className="flex-1 text-xs text-stone-500">Lead-ul nu are încă un pitch AI.</p>
+                <Button size="sm" variant="outline" disabled={generating} onClick={() => onGeneratePitch(lead)}>
+                  {generating ? <Loader2 className="animate-spin" /> : <Sparkles />}
+                  Generează pitch
+                </Button>
               </div>
             )}
+            {/* Canal, template / pitch AI, editare, ajustare AI, trimitere */}
+            <LeadComposer lead={lead} onChanged={refresh} />
 
-            <Label className="text-xs text-stone-500 mb-1.5 block">
-              Pitch generat (editabil înainte de trimitere)
-            </Label>
-            <textarea
-              value={pitch}
-              onChange={(e) => setPitch(e.target.value)}
-              rows={6}
-              placeholder="Niciun pitch generat încă — îl poți scrie manual aici."
-              className="w-full rounded-lg border border-stone-800 bg-stone-950/60 p-3 text-sm text-stone-200 placeholder-stone-600 focus:outline-none focus:ring-2 focus:ring-amber-500/40"
-            />
-
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-5 flex items-end gap-3 border-t border-stone-800/60 pt-4">
               <div className="flex-1">
                 <Label className="text-xs text-stone-500 mb-1.5 block">Status</Label>
                 <select
@@ -213,34 +205,9 @@ export function LeadDetailDialog({
                   ))}
                 </select>
               </div>
-              <div className="flex flex-wrap gap-2 pt-5">
-                <Button variant="outline" disabled={saving || sending} onClick={handleSave}>
-                  {saving ? <Loader2 className="animate-spin" /> : null} Salvează
-                </Button>
-                {lead.contact_phone && (
-                  <Button
-                    variant="outline"
-                    disabled={!pitch.trim()}
-                    onClick={() => {
-                      window.open(formatWhatsAppLink(lead.contact_phone!, pitch), '_blank');
-                      logWhatsAppSend(lead, pitch);
-                    }}
-                  >
-                    <MessageCircle /> WhatsApp
-                  </Button>
-                )}
-                <Button
-                  disabled={saving || sending || !canAutoSend || !pitch.trim()}
-                  title={!canAutoSend ? 'Lead-ul nu are email sau telefon — trimite manual' : undefined}
-                  onClick={handleSendNow}
-                >
-                  {sending ? <Loader2 className="animate-spin" /> : <Send />}
-                  Trimite acum ({lead.contact_email ? 'Email' : lead.contact_phone ? 'SMS' : 'manual'})
-                </Button>
-                <Button variant="outline" disabled={saving || sending} onClick={handleMarkSent}>
-                  Marchează ca trimis manual
-                </Button>
-              </div>
+              <Button variant="outline" disabled={saving || status === lead.status} onClick={handleSave}>
+                {saving ? <Loader2 className="animate-spin" /> : null} Salvează statusul
+              </Button>
             </div>
 
             <div className="mt-6 border-t border-stone-800/60 pt-4">
@@ -286,7 +253,8 @@ export function LeadDetailDialog({
             </div>
           </>
         )}
-      </div>
-    </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

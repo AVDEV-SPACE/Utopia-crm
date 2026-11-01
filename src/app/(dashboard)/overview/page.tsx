@@ -43,12 +43,34 @@ interface OverviewData {
     messages: number; leadsTotal: number;
   };
   pitchedTrend: number[];
+  outreach:       OutreachMonth;
   activity:       { date: string; bookings: number; chats: number }[];
   activityBucket: ActivityBucket;
   today:          TodayBooking[];
 }
 
 type ActivityBucket = 'day' | 'week' | 'month';
+
+/** Outreach-ul lunii curente (toate canalele), din /api/overview. */
+interface OutreachMonth {
+  dailyTarget: number;
+  daysInMonth: number;
+  /** Ziua curentă din lună (1 = prima zi) */
+  dayOfMonth:  number;
+  today:       number;
+  month:       number;
+  days:        { date: string; sent: number }[];
+  emailOpens:  number;
+  channels:    { channel: string; messages: number; leads: number; replied: number; failed: number }[];
+}
+
+const EMPTY_OUTREACH: OutreachMonth = {
+  dailyTarget: 0, daysInMonth: 0, dayOfMonth: 0, today: 0, month: 0, days: [], emailOpens: 0, channels: [],
+};
+
+const CHANNEL_NAMES: Record<string, string> = {
+  email: 'Email', sms: 'SMS', whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn',
+};
 
 /** Perioadele graficului „Activitate” — cheile sunt cele acceptate de /api/overview?activity=. */
 const ACTIVITY_PERIODS = [
@@ -214,27 +236,6 @@ function PeriodSelect<K extends string>({ options, value, onChange, label }: {
   );
 }
 
-function Sparkline({ values }: { values: number[] }) {
-  const pts = values.length > 1 ? values : [values[0] ?? 0, values[0] ?? 0];
-  const max = Math.max(...pts, 1);
-  const W = 300, H = 64;
-  const coords = pts.map((v, i) => [(i / (pts.length - 1)) * W, H - 4 - (v / max) * (H - 10)]);
-  const line = coords.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-16" aria-hidden>
-      <defs>
-        <linearGradient id="ov-spark" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stopColor="var(--ov-accent)" stopOpacity=".35" />
-          <stop offset="100%" stopColor="var(--ov-accent)" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`${line} L${W},${H} L0,${H} Z`} fill="url(#ov-spark)" />
-      <path d={line} fill="none" stroke="var(--ov-accent)" strokeWidth="2" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
 /** Eticheta unei bare: ziua, săptămâna care începe la data respectivă, sau luna. */
 function bucketTitle(date: string, bucket: ActivityBucket) {
   const d = parseDay(date);
@@ -289,6 +290,149 @@ function ActivityChart({ data, bucket }: { data: OverviewData['activity']; bucke
   );
 }
 
+// ─── Cardul „Pitched” ──────────────────────────────────────────────────────
+type PitchedView = 'target' | 'replies';
+
+const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+
+/** Bara de progres din cardul întunecat; peste țintă rămâne plină. */
+function HeroProgress({ value }: { value: number }) {
+  return (
+    <div className="h-1.5 rounded-full bg-white/10 overflow-hidden" role="presentation">
+      <div className="h-full rounded-full bg-[var(--ov-accent)] transition-[width]" style={{ width: `${Math.min(100, value)}%` }} />
+    </div>
+  );
+}
+
+/**
+ * Outreach-ul lunii: ținta zilnică × zilele lunii, câte s-au trimis azi și în
+ * fiecare zi; a doua vizualizare arată rata de răspuns pe fiecare canal.
+ */
+function PitchedCard({ pitched, outreach, delta, pitchRate }: {
+  pitched:   OverviewData['pitched'];
+  outreach:  OutreachMonth;
+  delta:     string | null;
+  pitchRate: number;
+}) {
+  const [view, setView] = useState<PitchedView>('target');
+  const o = outreach;
+  const monthTarget = o.dailyTarget * o.daysInMonth;
+  const remainingDays = Math.max(o.daysInMonth - o.dayOfMonth + 1, 1);
+  // Ritmul necesar de azi încolo ca să atingi ținta lunii (azi inclus, fără ce s-a trimis deja azi)
+  const needPerDay = Math.max(0, Math.ceil((monthTarget - (o.month - o.today)) / remainingDays));
+  const maxDay = Math.max(o.dailyTarget, ...o.days.map(d => d.sent), 1);
+
+  const contacted = o.channels.reduce((s, c) => s + c.leads, 0);
+  const replied = o.channels.reduce((s, c) => s + c.replied, 0);
+
+  return (
+    <div className="rounded-2xl bg-[var(--ov-hero)] text-[var(--ov-hero-ink)] p-5 pb-4 md:col-span-2 lg:col-span-1 flex flex-col">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[13px] font-medium text-[var(--ov-hero-muted)]">Pitched · outreach</p>
+        <div className={cx(styles.mono, 'flex rounded-full border border-white/15 p-0.5 text-[11px]')} role="tablist" aria-label="Vizualizare outreach">
+          {([['target', 'Țintă'], ['replies', 'Răspunsuri']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={view === key}
+              onClick={() => setView(key)}
+              className={cx('rounded-full px-2.5 py-0.5 transition-colors', view === key ? 'bg-[var(--ov-accent)] text-white' : 'text-[var(--ov-hero-muted)] hover:text-[var(--ov-hero-ink)]')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === 'target' ? (
+        <>
+          <p className="mt-3 leading-none">
+            <span className={cx(styles.serif, styles.num, 'text-[48px]')}>{fmtCount(o.today)}</span>
+            <span className="ml-2 text-base text-[var(--ov-hero-muted)]">/ {fmtCount(o.dailyTarget)} azi</span>
+          </p>
+          <div className="mt-3"><HeroProgress value={pct(o.today, o.dailyTarget)} /></div>
+          <p className={cx(styles.mono, 'mt-2 text-[11px] text-[var(--ov-hero-muted)]')}>
+            Luna: {fmtCount(o.month)} / {fmtCount(monthTarget)} ({pct(o.month, monthTarget)}%) · {o.dailyTarget}/zi × {o.daysInMonth} zile
+          </p>
+          <div className="mt-1.5"><HeroProgress value={pct(o.month, monthTarget)} /></div>
+          {o.month < monthTarget && (
+            <p className={cx(styles.mono, 'mt-2 text-[11px] text-[var(--ov-hero-muted)]')}>
+              Ritm necesar: {fmtCount(needPerDay)}/zi pentru {remainingDays === 1 ? 'ultima zi' : `ultimele ${remainingDays} zile`}
+            </p>
+          )}
+
+          {/* O bară pe zi; linia punctată = ținta zilnică, zilele viitoare estompate */}
+          <div className="relative mt-auto pt-4">
+            <div className="relative flex items-end gap-[2px] h-14">
+              <span
+                className="pointer-events-none absolute inset-x-0 border-t border-dashed border-white/30"
+                style={{ bottom: `${(o.dailyTarget / maxDay) * 100}%` }}
+                aria-hidden
+              />
+              {o.days.map((d, i) => {
+                const future = i + 1 > o.dayOfMonth;
+                const isToday = i + 1 === o.dayOfMonth;
+                return (
+                  <span
+                    key={d.date}
+                    title={`${fmtDay(d.date)} · ${d.sent} trimise`}
+                    className={cx(
+                      'flex-1 rounded-t-[2px]',
+                      future ? 'bg-white/5' : d.sent >= o.dailyTarget && o.dailyTarget > 0 ? 'bg-[var(--ov-accent)]' : 'bg-white/35',
+                      isToday && 'ring-1 ring-[var(--ov-accent)]',
+                    )}
+                    style={{ height: `${Math.max(future ? 4 : d.sent ? 6 : 3, (d.sent / maxDay) * 100)}%` }}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-3 leading-none">
+            <span className={cx(styles.serif, styles.num, 'text-[48px]')}>{pct(replied, contacted)}%</span>
+            <span className="ml-2 text-base text-[var(--ov-hero-muted)]">rată de răspuns</span>
+          </p>
+          <p className={cx(styles.mono, 'mt-2 text-[11px] text-[var(--ov-hero-muted)]')}>
+            {fmtCount(replied)} din {fmtCount(contacted)} lead-uri contactate luna asta
+            {o.emailOpens > 0 && ` · ${fmtCount(o.emailOpens)} emailuri deschise`}
+          </p>
+          <div className="mt-3 space-y-2.5">
+            {o.channels.length === 0 ? (
+              <p className="text-[12px] text-[var(--ov-hero-muted)]">Nicio trimitere luna asta.</p>
+            ) : (
+              o.channels.map(c => (
+                <div key={c.channel}>
+                  <div className="flex items-baseline justify-between gap-2 text-[12px]">
+                    <span className="font-medium">{CHANNEL_NAMES[c.channel] ?? c.channel}</span>
+                    <span className={cx(styles.mono, 'text-[11px] text-[var(--ov-hero-muted)]')}>
+                      {c.messages} trimise · {c.replied}/{c.leads} răspuns ({pct(c.replied, c.leads)}%)
+                      {c.failed > 0 && <span className="text-[var(--ov-danger)]"> · {c.failed} eșuate</span>}
+                    </span>
+                  </div>
+                  <div className="mt-1"><HeroProgress value={pct(c.replied, c.leads)} /></div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
+      <div className={cx(styles.mono, 'mt-3 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--ov-hero-muted)]')}>
+        <span>
+          {fmtCount(pitched.total)} lead-uri contactate în total · {pitchRate.toFixed(1)}%
+          {delta && <span className="ml-1.5 rounded-full px-1.5 py-0.5 bg-[var(--ov-accent)] text-white">{delta}</span>}
+        </span>
+        <Link href="/pipeline?view=pitched" className="inline-flex items-center gap-1 hover:text-[var(--ov-hero-ink)] transition-colors">
+          Vezi pitch-urile <ArrowUpRight className="w-3 h-3" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────
 const FILTERS = [
   { key: 'all',       label: 'Toate'        },
@@ -332,6 +476,7 @@ export default function OverviewPage() {
         bookingsMonth: json.metrics?.bookingsThisMonth ?? 0,
         pitched:       json.pitched ?? { total: 0, thisMonth: 0, lastMonth: 0, messages: 0, leadsTotal: 0 },
         pitchedTrend:  json.pitchedTrend ?? [],
+        outreach:      json.outreach ?? EMPTY_OUTREACH,
         activity:       json.activity       ?? [],
         activityBucket: json.activityBucket ?? 'day',
         today:          json.today          ?? [],
@@ -463,29 +608,9 @@ export default function OverviewPage() {
           <>
             {/* ── KPI ─────────────────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Pitched */}
-              <Link href="/leads?view=pitched" title="Vezi pitch-urile trimise" className={cx(kpiLink, 'rounded-2xl bg-[var(--ov-hero)] text-[var(--ov-hero-ink)] p-5 pb-3 md:col-span-2 lg:col-span-1 flex flex-col')}>
-                <div className="flex items-start justify-between gap-3">
-                  <p className="text-[13px] font-medium text-[var(--ov-hero-muted)]">Pitched · lead-uri contactate</p>
-                  {delta && (
-                    <span className={cx(styles.mono, 'rounded-full px-2 py-0.5 text-[11px] font-medium bg-[var(--ov-accent)] text-white')}>
-                      {delta}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-3 leading-none">
-                  <span className={cx(styles.serif, styles.num, 'text-[48px]')}>{fmtCount(pt.total)}</span>
-                  {pt.leadsTotal > 0 && (
-                    <span className="ml-2 text-base text-[var(--ov-hero-muted)]">din {fmtCount(pt.leadsTotal)}</span>
-                  )}
-                </p>
-                <p className={cx(styles.mono, 'mt-2 text-[11px] text-[var(--ov-hero-muted)]')}>
-                  {pitchRate.toFixed(1)}% din lead-uri · {fmtCount(pt.messages)} mesaje trimise
-                </p>
-                <div className="mt-auto pt-2">
-                  <Sparkline values={data.pitchedTrend} />
-                </div>
-              </Link>
+              {/* Pitched — ținta de outreach a lunii și răspunsurile pe canal */}
+              {/* Div, nu link: comutatorul de vizualizare nu poate sta într-un <a>; lista are link propriu jos */}
+              <PitchedCard pitched={pt} outreach={data.outreach} delta={delta} pitchRate={pitchRate} />
 
               {/* Total bookings */}
               {/* Div, nu link: dropdown-ul de perioadă nu poate sta într-un <a>; lista completă are link propriu jos */}
