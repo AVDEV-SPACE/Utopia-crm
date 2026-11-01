@@ -12,6 +12,9 @@ const isPublicRoute = createRouteMatcher([
   '/api/check-authorization(.*)',
   // Webhook Twilio — se autentifică prin orgId/apiKey + semnătură X-Twilio-Signature
   '/api/webhooks/unified(.*)',
+  // Webhook Meta (Facebook Page + Instagram) — GET se verifică prin META_WEBHOOK_VERIFY_TOKEN,
+  // POST prin semnătura X-Hub-Signature-256 (HMAC cu META_APP_SECRET). Matcher exact.
+  '/api/webhooks/meta',
   // Ingest de lead-uri din site — se autentifică prin apiKey în body.
   // Matcher exact: sub-rutele (/api/leads/scan, /api/leads/[id]) rămân protejate,
   // iar GET-ul de listare își verifică sesiunea în handler.
