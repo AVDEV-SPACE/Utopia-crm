@@ -35,6 +35,8 @@ const SOURCE_LABELS: Record<string, string> = {
   website: 'Site',
   engine: 'Motor leaduri',
   linkedin: 'Import CSV',
+  facebook: 'Facebook',
+  instagram: 'Instagram',
 };
 
 const ICP_OPTIONS: Option[] = [

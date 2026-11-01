@@ -3,6 +3,7 @@ import {
   Conversation,
   ConversationChannel,
   ConversationMessage,
+  ConversationMessageKind,
   ConversationRole,
 } from './types';
 
@@ -111,6 +112,121 @@ export async function setHumanTakeover(input: {
     RETURNING *
   `;
   return (rows[0] as unknown as Conversation) ?? null;
+}
+
+// ── Facebook / Instagram (persoana = PSID / IGSID, fără telefon) ──────────
+
+/**
+ * Varianta socială a `getOrCreateConversation`: cheia e (org, canal, id extern),
+ * telefonul rămâne NULL. Cea pe telefon (WhatsApp / SMS) nu se schimbă.
+ */
+export async function getOrCreateSocialConversation(input: {
+  orgId: string;
+  channel: Extract<ConversationChannel, 'facebook' | 'instagram'>;
+  externalUserId: string;
+  contactName?: string | null;
+}): Promise<Conversation> {
+  const rows = await sql`
+    INSERT INTO conversations (org_id, channel, external_user_id, contact_name, last_message_at)
+    VALUES (${input.orgId}, ${input.channel}, ${input.externalUserId}, ${input.contactName ?? null}, now())
+    ON CONFLICT (org_id, channel, external_user_id) WHERE external_user_id IS NOT NULL DO UPDATE SET
+      last_message_at = now(),
+      contact_name    = COALESCE(EXCLUDED.contact_name, conversations.contact_name)
+    RETURNING *
+  `;
+  return rows[0] as unknown as Conversation;
+}
+
+/**
+ * Un DM sau un comentariu. `externalId` (mid / id comentariu) face inserarea
+ * idempotentă: `null` = mesaj deja salvat (retry de webhook).
+ */
+export async function appendSocialMessage(input: {
+  conversationId: string;
+  role: ConversationRole;
+  body: string;
+  externalId: string | null;
+  kind: ConversationMessageKind;
+  externalParentId?: string | null;
+  createdAt?: Date;
+}): Promise<ConversationMessage | null> {
+  const rows = await sql`
+    INSERT INTO conversation_messages (conversation_id, role, body, external_id, kind, external_parent_id, created_at)
+    VALUES (
+      ${input.conversationId}, ${input.role}, ${input.body}, ${input.externalId},
+      ${input.kind}, ${input.externalParentId ?? null}, ${(input.createdAt ?? new Date()).toISOString()}::timestamptz
+    )
+    ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO NOTHING
+    RETURNING *
+  `;
+  return (rows[0] as unknown as ConversationMessage) ?? null;
+}
+
+/** Leagă conversația de lead-ul persoanei (și îi completează numele). */
+export async function setConversationLead(conversationId: string, leadId: string, contactName: string | null): Promise<void> {
+  await sql`
+    UPDATE conversations SET lead_id = ${leadId}, contact_name = COALESCE(contact_name, ${contactName})
+    WHERE id = ${conversationId}
+  `;
+}
+
+export async function getConversation(id: string, orgId: string): Promise<Conversation | null> {
+  const rows = await sql`SELECT * FROM conversations WHERE id = ${id}::uuid AND org_id = ${orgId}`;
+  return (rows[0] as unknown as Conversation) ?? null;
+}
+
+/** Un rând din inbox-ul /socials: conversația + ultimul mesaj. */
+export interface SocialConversationSummary extends Conversation {
+  last_body: string | null;
+  last_role: ConversationRole | null;
+  last_kind: ConversationMessageKind | null;
+  /** Ultimul mesaj primit de la client (pentru fereastra de 24h) */
+  last_inbound_at: string | null;
+}
+
+export async function listSocialConversations(
+  orgId: string,
+  channel: Extract<ConversationChannel, 'facebook' | 'instagram'> | null,
+  limit = 100
+): Promise<SocialConversationSummary[]> {
+  const rows = await sql`
+    SELECT c.*, last.body AS last_body, last.role AS last_role, last.kind AS last_kind,
+           (SELECT max(m.created_at) FROM conversation_messages m
+             WHERE m.conversation_id = c.id AND m.role = 'user' AND m.kind = 'dm') AS last_inbound_at
+    FROM conversations c
+    LEFT JOIN LATERAL (
+      SELECT body, role, kind FROM conversation_messages m
+      WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1
+    ) last ON true
+    WHERE c.org_id = ${orgId}
+      AND c.channel IN ('facebook', 'instagram')
+      AND (${channel}::text IS NULL OR c.channel = ${channel})
+    ORDER BY c.last_message_at DESC
+    LIMIT ${limit}
+  `;
+  return rows as unknown as SocialConversationSummary[];
+}
+
+/** Toate mesajele unei conversații, cronologic (cel mai vechi primul). */
+export async function listConversationMessages(conversationId: string, limit = 200): Promise<ConversationMessage[]> {
+  const rows = await sql`
+    SELECT * FROM (
+      SELECT * FROM conversation_messages WHERE conversation_id = ${conversationId}::uuid
+      ORDER BY created_at DESC LIMIT ${limit}
+    ) recent
+    ORDER BY created_at ASC
+  `;
+  return rows as unknown as ConversationMessage[];
+}
+
+/** Ultimul DM primit de la client — de aici curge fereastra de 24h a Meta. */
+export async function lastInboundDmAt(conversationId: string): Promise<Date | null> {
+  const rows = await sql`
+    SELECT max(created_at) AS at FROM conversation_messages
+    WHERE conversation_id = ${conversationId}::uuid AND role = 'user' AND kind = 'dm'
+  `;
+  const at = (rows[0] as { at: string | null } | undefined)?.at;
+  return at ? new Date(at) : null;
 }
 
 export async function listConversations(orgId: string, limit = 100): Promise<Conversation[]> {

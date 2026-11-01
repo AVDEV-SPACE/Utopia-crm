@@ -245,8 +245,9 @@ export interface AutomationLeadInput {
   contact_phone?: string | null;
   contact_email?: string | null;
   service_desired?: string | null;
-  status: 'MISSED_CALL' | 'WEB_FORM';
-  /** 'missed_call' | 'website' | ... — de unde a intrat lead-ul */
+  /** 'new' = contact din Facebook / Instagram (/socials) */
+  status: 'MISSED_CALL' | 'WEB_FORM' | 'new';
+  /** 'missed_call' | 'website' | 'facebook' | 'instagram' | ... — de unde a intrat lead-ul */
   source: string;
   /** Referință externă unică (ex. Twilio CallSid) pentru idempotență */
   source_ref?: string | null;

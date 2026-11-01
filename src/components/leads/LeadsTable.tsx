@@ -55,6 +55,8 @@ const SOURCE_LABELS: Record<string, string> = {
   website: 'Site',
   engine: 'Motor leaduri',
   linkedin: 'Import CSV',
+  facebook: 'Facebook',
+  instagram: 'Instagram',
 };
 
 const CHANNEL_META: Record<string, { label: string; icon: typeof Mail }> = {

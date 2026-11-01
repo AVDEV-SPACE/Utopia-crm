@@ -5,8 +5,9 @@ import { htmlToText, isHtmlContent } from '@/services/outreach/render';
  * Conversația unui lead pe toate canalele, cronologic: ce i s-a trimis
  * (`sent_messages`, orice canal), ce a răspuns pe email (evenimentele
  * `reply_received` / `auto_reply`), conversațiile WhatsApp/SMS prin Twilio
- * (`conversation_messages`, potrivite după telefon) și restul evenimentelor
- * din pipeline (deschideri, schimbări de etapă). Notele rămân în `lead_notes`.
+ * (`conversation_messages`, potrivite după telefon), DM-urile și comentariile
+ * Facebook / Instagram (conversațiile legate prin `lead_id`) și restul
+ * evenimentelor din pipeline (deschideri, schimbări de etapă). Notele rămân în `lead_notes`.
  */
 
 /** Textul unui mesaj afișat în conversație e limitat (emailurile HTML pot fi lungi). */
@@ -45,20 +46,28 @@ export type TimelineItem = TimelineMessage | TimelineEvent;
 /** Evenimentele care dublează un rând din `sent_messages` (trimiterea e deja în conversație). */
 const SENT_EVENT = /_sent(_manual)?$/;
 
+/** Pe Facebook / Instagram mesajele vin din conversație; evenimentele lor ar fi dubluri. */
+const SOCIAL_CHANNELS = new Set(['facebook', 'instagram']);
+const SOCIAL_MESSAGE_EVENTS = new Set(['reply_received', 'comment_received']);
+
 const plain = (body: string) => (isHtmlContent(body) ? htmlToText(body) : body.trim()).slice(0, MAX_BODY);
 
-/** Tabelele opționale (conversații Twilio) pot lipsi într-o instalare mai veche. */
+/**
+ * Tabelele / coloanele opționale (conversații, setup-db-socials.sql) pot lipsi
+ * într-o instalare mai veche: 42P01 = tabelă lipsă, 42703 = coloană lipsă.
+ */
 async function optional<T>(query: Promise<T>, fallback: T): Promise<T> {
   try {
     return await query;
   } catch (error) {
-    if ((error as { code?: string }).code === '42P01') return fallback;
+    const code = (error as { code?: string }).code;
+    if (code === '42P01' || code === '42703') return fallback;
     throw error;
   }
 }
 
 export async function getLeadTimeline(leadId: string, limit = 300): Promise<TimelineItem[]> {
-  const [sent, events, chats] = await Promise.all([
+  const [sent, events, chats, social] = await Promise.all([
     sql`
       SELECT id::text, channel, subject, body, template_title, status, created_at
       FROM sent_messages WHERE lead_id = ${leadId}::uuid
@@ -78,6 +87,17 @@ export async function getLeadTimeline(leadId: string, limit = 300): Promise<Time
           ON right(regexp_replace(c.contact_phone, '[^0-9]', '', 'g'), 9) = right(regexp_replace(l.contact_phone, '[^0-9]', '', 'g'), 9)
         JOIN conversation_messages m ON m.conversation_id = c.id
         WHERE l.id = ${leadId}::uuid AND length(regexp_replace(coalesce(l.contact_phone, ''), '[^0-9]', '', 'g')) >= 9
+        ORDER BY m.created_at DESC LIMIT ${limit}
+      `,
+      []
+    ),
+    // Facebook / Instagram: conversațiile legate de lead la primul mesaj (/socials)
+    optional(
+      sql`
+        SELECT m.id::text, c.channel, m.role, m.body, m.kind, m.created_at
+        FROM conversations c
+        JOIN conversation_messages m ON m.conversation_id = c.id
+        WHERE c.lead_id = ${leadId}::uuid AND c.channel IN ('facebook', 'instagram')
         ORDER BY m.created_at DESC LIMIT ${limit}
       `,
       []
@@ -107,6 +127,7 @@ export async function getLeadTimeline(leadId: string, limit = 300): Promise<Time
     const event = e.event as string;
     const at = new Date(e.occurred_at as string).toISOString();
     if (SENT_EVENT.test(event)) continue;
+    if (SOCIAL_MESSAGE_EVENTS.has(event) && SOCIAL_CHANNELS.has(e.channel as string)) continue;
     const payload = (e.payload ?? {}) as { subject?: string | null; intent?: string | null; summary?: string | null };
     if (event === 'reply_received' || event === 'auto_reply') {
       items.push({
@@ -143,6 +164,23 @@ export async function getLeadTimeline(leadId: string, limit = 300): Promise<Time
       direction: m.role === 'user' ? 'in' : 'out',
       channel: m.channel as string,
       subject: null,
+      body: ((m.body as string | null) ?? '').slice(0, MAX_BODY),
+      author: m.role === 'assistant' ? 'AI' : m.role === 'human' ? 'Operator' : null,
+      intent: null,
+      summary: null,
+      automatic: false,
+      failed: false,
+    });
+  }
+
+  for (const m of social as Record<string, unknown>[]) {
+    items.push({
+      type: 'message',
+      id: `social:${m.id}`,
+      at: new Date(m.created_at as string).toISOString(),
+      direction: m.role === 'user' ? 'in' : 'out',
+      channel: m.channel as string,
+      subject: m.kind === 'comment' ? 'Comentariu public' : null,
       body: ((m.body as string | null) ?? '').slice(0, MAX_BODY),
       author: m.role === 'assistant' ? 'AI' : m.role === 'human' ? 'Operator' : null,
       intent: null,
