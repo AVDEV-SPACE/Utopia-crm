@@ -14,6 +14,7 @@ import {
   Target,
   Bot,
   Workflow,
+  Share2,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -25,6 +26,7 @@ const menuItems = [
   { name: 'Emails',  href: '/educational-templates',   icon: BookOpen },
   { name: 'Lead Generation', href: '/lead-generation',     icon: Target },
   { name: 'Pipeline',    href: '/pipeline',                icon: Workflow },
+  { name: 'Socials',     href: '/socials',                 icon: Share2 },
   { name: 'AI Follow-Up', href: '/dashboard/follow-ups-ai', icon: Bot },
 ];
 
