@@ -31,6 +31,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/cron/outreach-plan',
   '/api/cron/outreach-send',
   '/api/cron/inbox-sync',
+  '/api/cron/social-publish',
   // Pixelul de deschidere și dezabonarea din emailurile de outreach: tokenul
   // aleator din URL (48 hex, validat în handler) e singura autorizare.
   '/api/t/o/(.*)',
