@@ -1,13 +1,19 @@
 // src/app/(dashboard)/messaging/page.tsx
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useLiveRefresh } from '@/hooks/use-live-refresh';
 
 export const dynamic = 'force-dynamic';
+
+/** Conversațiile cu agentul de pe site trebuie să apară aproape instant. */
+const REFRESH_MS = 5_000;
 
 interface ChatSession {
   sessionId: string;
   clientEmail: string | null;
   clientPhone: string | null;
+  clientName: string | null;
+  takenByHuman: boolean;
   startedAt: string;
   endedAt: string | null;
   status: string;
@@ -26,48 +32,123 @@ interface ChatMessage {
 
 export default function MessagingPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [selectedSession, setSelectedSession] = useState<ChatSession | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  const [togglingTakeover, setTogglingTakeover] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const bottom = useRef<HTMLDivElement>(null);
+  // Sesiunea deschisă acum — un răspuns întârziat pentru alta e ignorat
+  const selectedRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    fetchSessions();
-  }, []);
+  // Derivată din listă, ca statusul (ex. „booked”) să se actualizeze și în antet
+  const selectedSession = sessions.find((s) => s.sessionId === selectedId) ?? null;
 
-  const fetchSessions = async () => {
-    setLoading(true);
+  // `quiet`: reîncărcare în fundal — fără spinner și fără să golească lista la o eroare
+  const fetchSessions = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
     try {
-      const response = await fetch('/api/messaging/sessions');
+      const response = await fetch('/api/messaging/sessions', { cache: 'no-store' });
       if (!response.ok) throw new Error('Failed to fetch sessions');
       const data = await response.json();
       setSessions(data || []);
     } catch (error) {
       console.error('Error fetching sessions:', error);
-      setSessions([]);
+      if (!quiet) setSessions([]);
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchMessages = async (sessionId: string) => {
-    setLoadingMessages(true);
+  const fetchMessages = useCallback(async (sessionId: string, quiet = false) => {
+    if (!quiet) setLoadingMessages(true);
     try {
-      const response = await fetch(`/api/messaging/messages?sessionId=${sessionId}`);
+      const response = await fetch(`/api/messaging/messages?sessionId=${encodeURIComponent(sessionId)}`, {
+        cache: 'no-store',
+      });
       if (!response.ok) throw new Error('Failed to fetch messages');
       const data = await response.json();
-      setMessages(data || []);
+      if (selectedRef.current === sessionId) setMessages(data || []);
     } catch (error) {
       console.error('Error fetching messages:', error);
-      setMessages([]);
+      if (!quiet) setMessages([]);
     } finally {
-      setLoadingMessages(false);
+      if (!quiet) setLoadingMessages(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  useLiveRefresh(
+    useCallback(async () => {
+      const open = selectedRef.current;
+      await Promise.all([fetchSessions(true), open ? fetchMessages(open, true) : null]);
+    }, [fetchSessions, fetchMessages]),
+    REFRESH_MS
+  );
+
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [selectedId, messages.length]);
+
+  const handleSessionSelect = (session: ChatSession) => {
+    selectedRef.current = session.sessionId;
+    setSelectedId(session.sessionId);
+    setMessages([]);
+    setReply('');
+    setActionError(null);
+    fetchMessages(session.sessionId);
+  };
+
+  // Cât timp e preluată, agentul AI de pe site nu mai răspunde vizitatorului
+  const setTakeover = async (takenByHuman: boolean) => {
+    if (!selectedId) return;
+    setTogglingTakeover(true);
+    setActionError(null);
+    try {
+      const response = await fetch(`/api/messaging/sessions/${encodeURIComponent(selectedId)}/takeover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taken_by_human: takenByHuman }),
+      });
+      if (!response.ok) throw new Error('Failed to update takeover');
+      setSessions((prev) => prev.map((s) => (s.sessionId === selectedId ? { ...s, takenByHuman } : s)));
+    } catch (error) {
+      console.error('Error updating takeover:', error);
+      setActionError('Nu am putut actualiza conversația. Încearcă din nou.');
+    } finally {
+      setTogglingTakeover(false);
     }
   };
 
-  const handleSessionSelect = (session: ChatSession) => {
-    setSelectedSession(session);
-    fetchMessages(session.sessionId);
+  const sendReply = async () => {
+    const content = reply.trim();
+    if (!selectedId || !content || sending) return;
+    setSending(true);
+    setActionError(null);
+    try {
+      const response = await fetch('/api/messaging/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: selectedId, content }),
+      });
+      if (!response.ok) throw new Error('Failed to send message');
+      const message: ChatMessage = await response.json();
+      setReply('');
+      if (selectedRef.current === message.sessionId) setMessages((prev) => [...prev, message]);
+      // Trimiterea preia automat conversația
+      setSessions((prev) => prev.map((s) => (s.sessionId === selectedId ? { ...s, takenByHuman: true } : s)));
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      setActionError('Mesajul nu a putut fi trimis. Încearcă din nou.');
+    } finally {
+      setSending(false);
+    }
   };
 
   if (loading) {
@@ -87,7 +168,13 @@ export default function MessagingPage() {
       <div className="w-80 bg-neutral-900 border-r border-neutral-800 flex flex-col">
         <div className="p-4 border-b border-neutral-800">
           <h2 className="text-lg font-semibold text-white">Conversații cu Agentul</h2>
-          <p className="text-sm text-gray-400">{sessions.length} sesiuni</p>
+          <p className="flex items-center gap-2 text-sm text-gray-400">
+            {sessions.length} sesiuni
+            <span className="flex items-center gap-1 text-xs text-green-400" title="Se actualizează automat">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              Live
+            </span>
+          </p>
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -105,20 +192,27 @@ export default function MessagingPage() {
                 }`}
               >
                 <div className="flex justify-between items-start mb-2">
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    session.status === 'active'
-                      ? 'bg-green-500/20 text-green-400'
-                      : 'bg-gray-500/20 text-gray-400'
-                  }`}>
-                    {session.status}
-                  </span>
+                  <div className="flex gap-1">
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      session.status === 'active'
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {session.status}
+                    </span>
+                    {session.takenByHuman && (
+                      <span className="text-xs px-2 py-1 rounded-full bg-amber-500/20 text-amber-400">
+                        preluată
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-gray-500">
                     {new Date(session.startedAt).toLocaleDateString('ro-RO')}
                   </span>
                 </div>
 
                 <div className="text-sm text-white mb-1">
-                  {session.clientEmail || session.clientPhone || 'Client anonim'}
+                  {session.clientName || session.clientEmail || session.clientPhone || 'Client anonim'}
                 </div>
 
                 {session.firstMessage && (
@@ -143,16 +237,29 @@ export default function MessagingPage() {
       <div className="flex-1 flex flex-col">
         {selectedSession ? (
           <>
-            <div className="p-4 border-b border-neutral-800 bg-neutral-900">
-              <h3 className="text-lg font-semibold text-white">
-                Conversație cu {selectedSession.clientEmail || selectedSession.clientPhone || 'Client'}
-              </h3>
-              <div className="flex gap-4 text-sm text-gray-400 mt-1">
-                <span>Început: {new Date(selectedSession.startedAt).toLocaleString('ro-RO')}</span>
-                {selectedSession.endedAt && (
-                  <span>Sfârșit: {new Date(selectedSession.endedAt).toLocaleString('ro-RO')}</span>
-                )}
+            <div className="p-4 border-b border-neutral-800 bg-neutral-900 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white">
+                  Conversație cu {selectedSession.clientName || selectedSession.clientEmail || selectedSession.clientPhone || 'Client'}
+                </h3>
+                <div className="flex gap-4 text-sm text-gray-400 mt-1">
+                  <span>Început: {new Date(selectedSession.startedAt).toLocaleString('ro-RO')}</span>
+                  {selectedSession.endedAt && (
+                    <span>Sfârșit: {new Date(selectedSession.endedAt).toLocaleString('ro-RO')}</span>
+                  )}
+                </div>
               </div>
+              <button
+                onClick={() => setTakeover(!selectedSession.takenByHuman)}
+                disabled={togglingTakeover}
+                className={`shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50 ${
+                  selectedSession.takenByHuman
+                    ? 'bg-neutral-800 border border-neutral-700 text-gray-200 hover:bg-neutral-700'
+                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                }`}
+              >
+                {selectedSession.takenByHuman ? 'Predă agentului AI' : 'Preia conversația'}
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -174,10 +281,15 @@ export default function MessagingPage() {
                       className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                         message.role === 'user'
                           ? 'bg-orange-500 text-white'
-                          : 'bg-neutral-700 text-gray-100'
+                          : message.role === 'human'
+                            ? 'bg-amber-900/40 border border-amber-500/40 text-gray-100'
+                            : 'bg-neutral-700 text-gray-100'
                       }`}
                     >
-                      <p className="text-sm">{message.content}</p>
+                      {message.role === 'human' && (
+                        <span className="text-[10px] uppercase tracking-wider text-amber-400 block mb-1">Operator</span>
+                      )}
+                      <p className="text-sm whitespace-pre-line">{message.content}</p>
                       <span className="text-xs opacity-70 mt-1 block">
                         {new Date(message.createdAt).toLocaleTimeString('ro-RO', {
                           hour: '2-digit',
@@ -188,6 +300,39 @@ export default function MessagingPage() {
                   </div>
                 ))
               )}
+              <div ref={bottom} />
+            </div>
+
+            <div className="p-4 border-t border-neutral-800 bg-neutral-900">
+              {actionError && <p className="text-sm text-red-400 mb-2">{actionError}</p>}
+              <div className="flex gap-2">
+                <textarea
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendReply();
+                    }
+                  }}
+                  rows={2}
+                  maxLength={2000}
+                  placeholder={selectedSession.takenByHuman
+                    ? 'Scrie un mesaj vizitatorului...'
+                    : 'Scrie un mesaj — trimiterea preia conversația de la agentul AI'}
+                  className="flex-1 px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-xl text-white placeholder-gray-500 focus:ring-2 focus:ring-orange-500 outline-none transition resize-none"
+                />
+                <button
+                  onClick={sendReply}
+                  disabled={sending || !reply.trim()}
+                  className="px-5 rounded-xl bg-orange-500 text-white font-medium hover:bg-orange-600 transition disabled:opacity-50"
+                >
+                  {sending ? '...' : 'Trimite'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Mesajul apare în chatul de pe site doar cât timp vizitatorul are pagina deschisă.
+              </p>
             </div>
           </>
         ) : (

@@ -10,6 +10,10 @@ export async function GET() {
         cs.session_id                                          AS "sessionId",
         cs.client_email                                        AS "clientEmail",
         cs.client_phone                                        AS "clientPhone",
+        cs.client_name                                         AS "clientName",
+        -- Citit prin to_jsonb: lista se încarcă și dacă setup-db-chat-takeover.sql
+        -- nu a rulat încă (coloana lipsă → false), în loc să cadă tot query-ul.
+        COALESCE((to_jsonb(cs) ->> 'taken_by_human')::boolean, false) AS "takenByHuman",
         cs.status,
         cs.first_message                                       AS "firstMessage",
         COUNT(cm.id) FILTER (WHERE cm.role = 'user')          AS "messageCount",
@@ -18,14 +22,8 @@ export async function GET() {
         cs.ended_at                                            AS "endedAt"
       FROM chat_sessions cs
       LEFT JOIN chat_messages cm ON cm.session_id = cs.session_id
-      GROUP BY
-        cs.session_id,
-        cs.client_email,
-        cs.client_phone,
-        cs.status,
-        cs.first_message,
-        cs.started_at,
-        cs.ended_at
+      -- Grupare după cheia primară: Postgres permite atunci orice coloană din cs
+      GROUP BY cs.id
       -- Widget-ul de pe site deschide o sesiune „pending” la fiecare încărcare, chiar dacă
       -- nimeni nu scrie; afișăm doar conversațiile în care userul a scris cel puțin un mesaj.
       HAVING COUNT(cm.id) FILTER (WHERE cm.role = 'user') > 0
