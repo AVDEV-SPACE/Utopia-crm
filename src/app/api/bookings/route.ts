@@ -45,7 +45,18 @@ export async function GET(req: NextRequest) {
         b.message,
         b.created_at
       FROM bookings b
-      LEFT JOIN contacts c ON LOWER(c.email) = LOWER(b.email)
+      -- contacts nu are email unic (site-ul creează câte un contact la fiecare formular),
+      -- așa că alegem un singur contact per programare, altfel rândul se multiplică
+      LEFT JOIN LATERAL (
+        SELECT phone
+        FROM contacts
+        WHERE LOWER(email) = LOWER(b.email)
+        ORDER BY
+          (LOWER(full_name) = LOWER(b.name)) DESC,
+          (phone IS NOT NULL) DESC,
+          created_at DESC
+        LIMIT 1
+      ) c ON true
       ORDER BY b.created_at DESC
     `;
     return NextResponse.json(data);
@@ -75,15 +86,18 @@ export async function POST(req: NextRequest) {
       RETURNING id::text, meeting_date, meeting_time, name, email, company, service, status, created_at
     `;
 
-    // Salvează contactul (fără a arunca eroare dacă există deja)
+    // Salvează contactul doar dacă emailul nu există deja (tabela nu are constrângere unică pe email)
     if (email) {
       try {
         await sql`
           INSERT INTO contacts (full_name, email, phone, source, status)
-          VALUES (${name}, ${email}, ${phone ?? null}, 'crm', 'new')
+          SELECT ${name}, ${email}, ${phone ?? null}, 'crm', 'new'
+          WHERE NOT EXISTS (
+            SELECT 1 FROM contacts WHERE LOWER(email) = LOWER(${email})
+          )
         `;
-      } catch {
-        // Contactul poate exista deja — ignorăm eroarea de duplicat
+      } catch (err) {
+        console.error('Error saving booking contact:', err);
       }
     }
 
