@@ -2,6 +2,7 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { sql } from '@/lib/neon';
 import { mailboxCredentials } from '@/lib/messaging';
+import { parseBounce, type Bounce } from '@/services/outreach/bounce';
 
 /** Cât de departe în urmă căutăm răspunsuri la emailurile trimise. */
 const LOOKBACK_DAYS = 60;
@@ -164,6 +165,55 @@ export async function fetchInboundEmails(addresses: string[], since: Date, skip:
   }
 
   return result.sort((a, b) => a.date.getTime() - b.date.getTime());
+}
+
+/** Un raport de nelivrare găsit în căsuță. */
+export interface BounceEmail extends Bounce {
+  messageId: string;
+  date: Date;
+}
+
+/**
+ * Rapoartele de nelivrare primite după `since`, cele mai noi întâi. Vin de la
+ * `mailer-daemon`, deci nu apar în căutările de răspunsuri, care merg după adresa lead-ului.
+ * `skip` = Message-ID-uri deja procesate, al căror conținut nu se mai descarcă.
+ */
+export async function fetchBounces(since: Date, skip: Set<string>, limit: number): Promise<BounceEmail[]> {
+  const { user, pass } = mailboxCredentials();
+  if (!pass) throw new Error('Email neconfigurat: adaugă GMAIL_APP_PASSWORD în .env');
+
+  const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user, pass }, logger: false });
+  await client.connect();
+
+  const result: BounceEmail[] = [];
+  try {
+    const folders = await client.list();
+    const allMail = folders.find((f) => f.specialUse === '\\All')?.path ?? 'INBOX';
+    const lock = await client.getMailboxLock(allMail);
+    try {
+      const uids = await client.search({ gmraw: `from:(mailer-daemon OR postmaster) after:${gmailDate(since)}` }, { uid: true });
+      if (!uids || uids.length === 0) return result;
+
+      const found: { uid: number; messageId: string; date: Date }[] = [];
+      for await (const msg of client.fetch(uids, { envelope: true }, { uid: true })) {
+        const env = msg.envelope;
+        if (!env?.messageId || !env.date || skip.has(normId(env.messageId))) continue;
+        found.push({ uid: msg.uid, messageId: env.messageId, date: new Date(env.date) });
+      }
+      found.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+      for (const email of found.slice(0, limit)) {
+        const msg = await client.fetchOne(String(email.uid), { source: true }, { uid: true });
+        const bounce = msg && msg.source ? parseBounce(msg.source.toString('utf8')) : null;
+        if (bounce) result.push({ ...bounce, messageId: email.messageId, date: email.date });
+      }
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout().catch(() => {});
+  }
+  return result;
 }
 
 /**

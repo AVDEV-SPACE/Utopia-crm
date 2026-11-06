@@ -7,8 +7,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * Trimiterea emailurilor de outreach: maximum 2 pe rulare, luni–vineri
- * 09–17 (ora României), în limita plafonului zilnic. Garda pe oră e în
+ * Trimiterea emailurilor de outreach: maximum 2 pe rulare, în intervalele din
+ * `schedule.ts` (ora României), în limita plafonului zilnic. Garda pe oră e în
  * handler, nu doar în programator. Cere `Authorization: Bearer CRON_SECRET`.
  */
 export async function POST(req: NextRequest) {

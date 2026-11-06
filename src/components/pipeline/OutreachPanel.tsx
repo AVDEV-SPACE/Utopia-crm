@@ -18,7 +18,7 @@ interface OutreachState {
   settings: OutreachSettings;
   stats: { pending: number; dueNow: number; sentToday: number; sentTotal: number; replied: number; failed: number };
   previewLeads: { id: string; name: string; location: string | null; hasPitch: boolean }[];
-  status: { enabled: boolean; footer: boolean; emailConfigured: boolean; windowBlock: string | null; cap: number; testMode: boolean };
+  status: { enabled: boolean; emailConfigured: boolean; windowBlock: string | null; cap: number; testMode: boolean };
 }
 
 interface Preview {
@@ -177,12 +177,6 @@ export function OutreachPanel() {
 
       {open && state && (
         <div className="border-t border-stone-800/60 p-4 space-y-5">
-          {status && !status.footer && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-              Lipsește OUTREACH_SENDER_FOOTER (semnătura PFA) — fără ea nu pleacă niciun email.
-            </p>
-          )}
-
           <div className="grid gap-3 md:grid-cols-3">
             {STEPS.map(({ step, label, sub, caseType, ai }) => (
               <StepPicker

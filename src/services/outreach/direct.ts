@@ -4,7 +4,7 @@ import type { Lead } from '@/services/leads/types';
 import { logSentMessages } from '@/services/messages/repository';
 import { logPipelineEvent } from '@/services/pipeline/repository';
 import { CHANNEL_DELIVERY, CHANNEL_LABELS, channelTarget, leadContacts, type DirectChannel } from './channels';
-import { composeManualEmail, senderFooter } from './email';
+import { composeManualEmail } from './email';
 import { htmlToText, isHtmlContent } from './render';
 import { stopSequence } from './repository';
 
@@ -54,7 +54,7 @@ export async function sendDirect(lead: Lead, input: DirectSendInput, tenant: { o
     if (!isEmailConfigured()) throw new DirectSendError('Email neconfigurat: adaugă GMAIL_APP_PASSWORD', 503);
     const subject = input.subject?.trim();
     if (!subject) throw new DirectSendError('Emailul are nevoie de subiect');
-    const email = composeManualEmail({ body: input.body, html, footer: senderFooter() });
+    const email = composeManualEmail({ body: input.body, html });
     messageId = await sendEmail(target, subject, email.html, {
       text: email.text,
       fromName: process.env.OUTREACH_SENDER_NAME?.trim() || undefined,

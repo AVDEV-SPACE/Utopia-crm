@@ -51,6 +51,7 @@ const INTENT_LABELS: Record<string, string> = {
 
 const EVENT_LABELS: Record<string, string> = {
   email_opened: 'Email deschis',
+  email_bounced: 'Email respins',
   stage_changed: 'Etapă schimbată',
   unsubscribed: 'S-a dezabonat',
 };

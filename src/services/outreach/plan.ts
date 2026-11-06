@@ -1,7 +1,7 @@
 import { GroqRateLimitError } from '@/services/engine/groq';
 import { generateFollowups } from './ai';
 import { htmlToText } from './email';
-import { countPlannedToday, insertSequence, listPlanCandidates, type NewStep, type PlanCandidate } from './repository';
+import { countPlannedToday, getEmailSendCap, insertSequence, listPlanCandidates, type NewStep, type PlanCandidate } from './repository';
 import { allowedRecipients, dailyCap, STEP_OFFSET_DAYS } from './schedule';
 import { getOutreachSettings, getTemplates, isHtmlContent, renderTemplate, templateForStep } from './templates';
 import type { CampaignFilters, OutreachChannel, OutreachSettings, OutreachTemplate, PlanResult } from './types';
@@ -72,7 +72,7 @@ const addDays = (date: Date, days: number) => new Date(date.getTime() + days * 8
  *
  * Cu `campaign` (planificare manuală pe filtre), plafonul zilnic de planificare
  * nu se aplică: pașii stau în coadă, iar trimiterea îi ia în ritmul ei
- * (plafonul zilnic de trimitere, intervalul 09–17).
+ * (plafonul zilnic de trimitere, intervalele din `schedule.ts`).
  */
 export async function runOutreachPlan(budgetMs: number, campaign?: CampaignBatch): Promise<PlanResult> {
   const deadline = Date.now() + budgetMs;
@@ -86,7 +86,7 @@ export async function runOutreachPlan(budgetMs: number, campaign?: CampaignBatch
   const room: Record<OutreachChannel, number> = campaign
     ? { email: Infinity, instagram: Infinity, linkedin: Infinity }
     : {
-        email: Math.max(dailyCap('email') - plannedToday.email, 0),
+        email: Math.max((await getEmailSendCap()) - plannedToday.email, 0),
         instagram: Math.max(dailyCap('instagram') - plannedToday.instagram, 0),
         linkedin: Math.max(dailyCap('linkedin') - plannedToday.linkedin, 0),
       };

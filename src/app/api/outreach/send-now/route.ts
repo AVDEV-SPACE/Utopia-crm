@@ -8,7 +8,7 @@ export const maxDuration = 60;
 
 /**
  * „Trimite acum”: o rulare a jobului outreach-send, la cerere — aceleași
- * reguli (luni–vineri 09–17, plafonul zilnic, maximum 2 emailuri pe rulare).
+ * reguli (intervalele din `schedule.ts`, plafonul zilnic, maximum 2 emailuri pe rulare).
  */
 export async function POST(req: NextRequest) {
   const access = await requirePipelineOwner();

@@ -5,7 +5,6 @@ import { getTenantContext } from '@/lib/tenant';
 import { getLeadById } from '@/services/leads/repository';
 import { CHANNEL_MAX_CHARS, DIRECT_CHANNELS } from '@/services/outreach/channels';
 import { DirectSendError, sendDirect } from '@/services/outreach/direct';
-import { senderFooter } from '@/services/outreach/email';
 import { sql } from '@/lib/neon';
 
 export const runtime = 'nodejs';
@@ -29,7 +28,6 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
 
   return NextResponse.json({
     configured: { email: isEmailConfigured(), sms: isSmsConfigured() },
-    footer: Boolean(senderFooter()),
     pendingSteps,
   });
 }

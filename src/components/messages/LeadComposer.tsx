@@ -28,7 +28,6 @@ interface Template {
 
 interface ComposerContext {
   configured: { email: boolean; sms: boolean };
-  footer: boolean;
   pendingSteps: number;
 }
 
@@ -55,7 +54,7 @@ const CASE_LABELS: Record<string, string> = {
 };
 
 /** Ajustări frecvente, ca să nu scrii instrucțiunea de fiecare dată. */
-const QUICK_INSTRUCTIONS = ['Mai scurt', 'Ton mai prietenos', 'Mai formal', 'Încheie cu o întrebare clară', 'Pune accent pe programările online'];
+const QUICK_INSTRUCTIONS = ['Mai scurt', 'Ton mai prietenos', 'Mai formal', 'Pas următor mai ferm', 'Pune accent pe programările online'];
 
 /** Mesajul AI deja generat pentru canal (enrich): pitch-ul pe email, DM-urile pe social. */
 function aiDraft(lead: Lead, channel: DirectChannel): { subject: string; body: string } {
@@ -326,7 +325,6 @@ export function LeadComposer({ lead, onChanged }: LeadComposerProps) {
         <span className={tooLong ? 'text-red-400' : undefined}>
           {body.length}/{CHANNEL_MAX_CHARS[channel]} caractere
         </span>
-        {channel === 'email' && <span>{context?.footer ? 'Semnătura PFA se adaugă automat' : 'Fără semnătură: OUTREACH_SENDER_FOOTER nu e setat'}</span>}
         {channel !== 'email' && html && <span>Se trimite ca text simplu</span>}
       </div>
 

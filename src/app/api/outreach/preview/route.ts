@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePipelineOwner } from '@/lib/pipeline-auth';
 import { resolveStepContent } from '@/services/outreach/content';
-import { composeOutreachEmail, senderFooter, trackingBaseUrl } from '@/services/outreach/email';
+import { composeOutreachEmail, trackingBaseUrl } from '@/services/outreach/email';
 import { getPlannedStep, getPreviewLead, listPreviewLeads, type PreviewLead } from '@/services/outreach/repository';
 import { getTemplates, renderTemplate } from '@/services/outreach/templates';
 
@@ -95,11 +95,9 @@ export async function POST(req: NextRequest) {
     });
     if ('error' in content) return NextResponse.json({ error: content.error }, { status: 400 });
 
-    const footer = senderFooter();
     const email = composeOutreachEmail({
       body: content.body,
       html: content.html,
-      footer: footer ?? '[Semnătura PFA — setează OUTREACH_SENDER_FOOTER]',
       token: PREVIEW_TOKEN,
       baseUrl: trackingBaseUrl(req.nextUrl.origin),
     });
@@ -109,7 +107,7 @@ export async function POST(req: NextRequest) {
       subject: content.subject,
       html: email.html,
       text: email.text,
-      note: footer ? note : [note, 'Semnătura lipsește: fără OUTREACH_SENDER_FOOTER nu pleacă niciun email.'].filter(Boolean).join(' '),
+      note,
     });
   } catch (error) {
     console.error('Outreach: preview eșuat:', error);

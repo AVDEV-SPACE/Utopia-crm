@@ -5,8 +5,9 @@ import { logSentMessages } from '@/services/messages/repository';
 import { logPipelineEvent } from '@/services/pipeline/repository';
 import { STAGE_RANK, TERMINAL_STAGES } from '@/services/pipeline/stages';
 import { resolveStepContent, type StepContent } from './content';
-import { composeOutreachEmail, senderFooter, trackingBaseUrl } from './email';
-import { claimDueEmailTasks, countSentToday, markTaskFailed, markTaskSent, stopSequence, type ClaimedEmailTask } from './repository';
+import { composeOutreachEmail, trackingBaseUrl } from './email';
+import { canReceiveEmail } from './mx';
+import { claimDueEmailTasks, countSentToday, getEmailSendCap, markTaskFailed, markTaskSent, stopSequence, type ClaimedEmailTask } from './repository';
 import { allowedRecipients, dailyCap, isSendingEnabled, sendWindowBlock } from './schedule';
 import { getTemplates } from './templates';
 import type { SendResult } from './types';
@@ -21,26 +22,25 @@ export function stopsSequence(stage: string | null): boolean {
 }
 
 /**
- * O rulare de trimitere: luni–vineri 09–17 (ora României), maximum 2 emailuri,
- * în limita plafonului zilnic. Garda pe etape se verifică la fiecare pas,
- * imediat înainte de trimitere. Template-urile se randează acum, deci o
- * editare a template-ului se vede și în pașii planificați înainte.
+ * O rulare de trimitere: în intervalele din `schedule.ts`, maximum 2 emailuri,
+ * în limita plafonului zilnic (cu creșterea treptată din primele săptămâni).
+ * Garda pe etape se verifică la fiecare pas, imediat înainte de trimitere.
+ * Template-urile se randează acum, deci o editare a template-ului se vede și în
+ * pașii planificați înainte.
  */
 export async function runOutreachSend(requestOrigin: string): Promise<SendResult> {
-  const cap = dailyCap('email');
-  const result: SendResult = { sent: 0, failed: 0, cancelled: 0, sentToday: 0, cap, errors: [] };
+  const result: SendResult = { sent: 0, failed: 0, cancelled: 0, sentToday: 0, cap: dailyCap('email'), errors: [] };
 
   if (!isSendingEnabled()) return { ...result, skipped: 'OUTREACH_SEND_ENABLED nu este true' };
   const blocked = sendWindowBlock();
   if (blocked) return { ...result, skipped: blocked };
 
-  const footer = senderFooter();
-  if (!footer) return { ...result, skipped: 'OUTREACH_SENDER_FOOTER lipsește — emailurile trebuie să conțină datele expeditorului' };
   if (!isEmailConfigured()) return { ...result, skipped: 'Email neconfigurat (GMAIL_APP_PASSWORD)' };
 
+  result.cap = await getEmailSendCap();
   result.sentToday = await countSentToday('email');
-  const room = Math.min(MAX_PER_RUN, cap - result.sentToday);
-  if (room <= 0) return { ...result, skipped: `plafonul zilnic de ${cap} emailuri e atins` };
+  const room = Math.min(MAX_PER_RUN, result.cap - result.sentToday);
+  if (room <= 0) return { ...result, skipped: `plafonul zilnic de ${result.cap} emailuri e atins` };
 
   const tasks = await claimDueEmailTasks(room, allowedRecipients());
   const templates = await getTemplates(tasks.map((t) => t.template_id).filter((id): id is number => id !== null));
@@ -54,6 +54,15 @@ export async function runOutreachSend(requestOrigin: string): Promise<SendResult
     if (!task.contact_email) {
       await markTaskFailed(task.id, 'Lead-ul nu mai are adresă de email');
       result.failed++;
+      continue;
+    }
+    // O adresă pe un domeniu fără server de email ar fi o respingere sigură
+    if (!(await canReceiveEmail(task.contact_email))) {
+      const error = 'Domeniul adresei nu primește email (fără înregistrare MX)';
+      await markTaskFailed(task.id, error);
+      result.cancelled += await stopSequence(task.lead_id, 'cancelled');
+      result.failed++;
+      result.errors.push(`${task.company_name}: ${error}`);
       continue;
     }
 
@@ -76,7 +85,7 @@ export async function runOutreachSend(requestOrigin: string): Promise<SendResult
     // Pauză între cele două emailuri ale rulării, ca trimiterile să nu fie lipite
     if (index > 0) await sleep(2_000 + Math.floor(Math.random() * 4_000));
 
-    const email = composeOutreachEmail({ body: content.body, html: content.html, footer, token: task.tracking_token, baseUrl });
+    const email = composeOutreachEmail({ body: content.body, html: content.html, token: task.tracking_token, baseUrl });
     const thread = task.thread_ids ?? [];
 
     let messageId: string;

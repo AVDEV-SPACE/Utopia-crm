@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { isEmailConfigured } from '@/lib/messaging';
 import { requirePipelineOwner } from '@/lib/pipeline-auth';
-import { senderFooter } from '@/services/outreach/email';
-import { getOutreachStats, listPreviewLeads } from '@/services/outreach/repository';
-import { dailyCap, isSendingEnabled, sendWindowBlock } from '@/services/outreach/schedule';
+import { getEmailSendCap, getOutreachStats, listPreviewLeads } from '@/services/outreach/repository';
+import { isSendingEnabled, sendWindowBlock } from '@/services/outreach/schedule';
 import { getOutreachSettings, getTemplates, updateOutreachSettings } from '@/services/outreach/templates';
 
 export const runtime = 'nodejs';
@@ -18,7 +17,7 @@ export async function GET() {
   if (access instanceof NextResponse) return access;
 
   try {
-    const [settings, stats, previewLeads] = await Promise.all([getOutreachSettings(), getOutreachStats(), listPreviewLeads(30)]);
+    const [settings, stats, previewLeads, cap] = await Promise.all([getOutreachSettings(), getOutreachStats(), listPreviewLeads(30), getEmailSendCap()]);
     return NextResponse.json(
       {
         settings,
@@ -26,10 +25,9 @@ export async function GET() {
         previewLeads: previewLeads.map((l) => ({ id: l.id, name: l.company_name, location: l.location, hasPitch: Boolean(l.pitch_generated) })),
         status: {
           enabled: isSendingEnabled(),
-          footer: Boolean(senderFooter()),
           emailConfigured: isEmailConfigured(),
           windowBlock: sendWindowBlock(),
-          cap: dailyCap('email'),
+          cap,
           testMode: Boolean(process.env.OUTREACH_ALLOWED_RECIPIENTS?.trim()),
         },
       },

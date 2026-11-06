@@ -1,6 +1,6 @@
 import { GroqRateLimitError } from '@/services/engine/groq';
 import { engineOrgId } from '@/services/engine/run';
-import { fetchInboundEmails, syncEmailReplies } from '@/services/messages/replies';
+import { fetchBounces, fetchInboundEmails, syncEmailReplies } from '@/services/messages/replies';
 import { logPipelineEvent } from '@/services/pipeline/repository';
 import { statusForStage } from '@/services/pipeline/stages';
 import { classifyReply, stageForIntent } from './ai';
@@ -8,6 +8,7 @@ import {
   listAwaitingReplyOrgs,
   listEmailContacts,
   listRecordedReplyIds,
+  markEmailBounced,
   markLeadRepliesHandled,
   postponeSequence,
   restoreLeadStatus,
@@ -25,11 +26,51 @@ const OUT_OF_OFFICE_DELAY_DAYS = 3;
 /** Intențiile cu care un răspuns nou scoate lead-ul din LOST (s-a răzgândit, întreabă). */
 const REOPENING_INTENTS = new Set<ReplyIntent>(['interested', 'question', 'objection']);
 
+/** Rapoartele de nelivrare vin în câteva zile; nu căutăm mai departe de atât. */
+const BOUNCE_LOOKBACK_DAYS = 14;
+const MAX_BOUNCES_PER_RUN = 50;
+
 /**
- * Răspunsurile leadurilor pe email. Două etape:
+ * Un email respins: secvența lead-ului se oprește, ca follow-up-urile să nu
+ * lovească din nou o adresă moartă. Etapa rămâne, lead-ul poate fi contactat
+ * pe alt canal. O eroare de citire nu blochează procesarea răspunsurilor.
+ */
+async function processBounces(byEmail: Map<string, EmailContact>, since: Date, recorded: Set<string>, result: InboxSyncResult) {
+  const from = new Date(Math.max(since.getTime(), Date.now() - BOUNCE_LOOKBACK_DAYS * 86_400_000));
+  try {
+    for (const bounce of await fetchBounces(from, recorded, MAX_BOUNCES_PER_RUN)) {
+      const contact = byEmail.get(bounce.recipient);
+      if (!contact || bounce.date <= new Date(contact.first_sent_at)) continue;
+
+      await stopSequence(contact.lead_id, 'cancelled');
+      await markEmailBounced(contact.lead_id, contact.email, bounce.reason);
+      await logPipelineEvent(
+        {
+          key: contact.source_ref,
+          email: contact.email,
+          channel: 'email',
+          event: 'email_bounced',
+          stage: null,
+          campaignId: null,
+          replyText: null,
+          occurredAt: bounce.date,
+          payload: { replyMessageId: bounce.messageId, status: bounce.status, reason: bounce.reason },
+        },
+        contact.lead_id
+      );
+      result.bounced++;
+    }
+  } catch (err) {
+    result.errors.push(`emailuri respinse: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Răspunsurile leadurilor pe email. Trei etape:
  * 1. sincronizarea Gmail existentă (`syncEmailReplies`, ca în „Mesaje trimise”)
  *    marchează primul răspuns la fiecare email trimis;
- * 2. fiecare email primit de la un lead contactat — inclusiv mesajele
+ * 2. rapoartele de nelivrare opresc secvența adreselor respinse;
+ * 3. fiecare email primit de la un lead contactat — inclusiv mesajele
  *    următoare din același fir — devine un eveniment `reply_received` cu textul
  *    lui (conversația din „Istoric”), clasificat cu Groq:
  *    - răspuns automat → secvența se amână, lead-ul rămâne în etapa lui;
@@ -39,7 +80,7 @@ const REOPENING_INTENTS = new Set<ReplyIntent>(['interested', 'question', 'objec
  */
 export async function runInboxSync(budgetMs: number): Promise<InboxSyncResult> {
   const deadline = Date.now() + budgetMs;
-  const result: InboxSyncResult = { checked: 0, matched: 0, processed: 0, outOfOffice: 0, errors: [] };
+  const result: InboxSyncResult = { checked: 0, matched: 0, processed: 0, outOfOffice: 0, bounced: 0, errors: [] };
 
   const orgs = new Set([engineOrgId(), ...(await listAwaitingReplyOrgs())]);
   for (const orgId of orgs) {
@@ -59,6 +100,8 @@ export async function runInboxSync(budgetMs: number): Promise<InboxSyncResult> {
   }
   const since = new Date(Math.min(...contacts.map((c) => new Date(c.first_sent_at).getTime())));
   const recorded = await listRecordedReplyIds(contacts.map((c) => c.lead_id));
+
+  await processBounces(byEmail, since, recorded, result);
 
   const inbound = (await fetchInboundEmails(Array.from(byEmail.keys()), since, recorded))
     .filter((email) => {

@@ -1,6 +1,6 @@
 import { sql } from '@/lib/neon';
 import { PIPELINE_SOURCES } from '@/services/pipeline/repository';
-import { STEP_OFFSET_DAYS, TODAY_START_SQL } from './schedule';
+import { emailSendCap, STEP_OFFSET_DAYS, TODAY_START_SQL } from './schedule';
 import type { CampaignFilters, OutreachChannel, OutreachTask } from './types';
 
 /** Etapele din care un lead intră în secvență. */
@@ -167,14 +167,29 @@ export async function insertSequence(leadId: string, channel: OutreachChannel, s
   return results.reduce((n, rows) => n + rows.length, 0);
 }
 
-/** Trimiterile de azi pe un canal (pentru plafon). */
+/**
+ * Trimiterile de azi pe un canal (pentru plafon). După `sent_at`, nu după status:
+ * un email la care s-a răspuns sau care a fost respins tot a plecat azi.
+ */
 export async function countSentToday(channel: OutreachChannel): Promise<number> {
   const rows = await sql.query(
     `SELECT count(*)::int AS n FROM outreach_tasks
-     WHERE channel = $1 AND status = 'sent' AND sent_at >= ${TODAY_START_SQL}`,
+     WHERE channel = $1 AND sent_at >= ${TODAY_START_SQL}`,
     [channel]
   );
   return (rows[0] as { n: number }).n;
+}
+
+/** Plafonul de email de azi. Creșterea treptată pornește la prima trimitere reală, nu la un test. */
+export async function getEmailSendCap(): Promise<number> {
+  const rows = await sql`
+    SELECT min(t.sent_at) AS first_sent_at
+    FROM outreach_tasks t
+    JOIN leads l ON l.id = t.lead_id
+    WHERE t.channel = 'email' AND t.sent_at IS NOT NULL AND l.company_name NOT ILIKE 'TEST %'
+  `;
+  const first = rows[0]?.first_sent_at as string | null | undefined;
+  return emailSendCap(first ? new Date(first) : null);
 }
 
 /** Un pas de email revendicat pentru trimitere, cu lead-ul și firul anterior. */
@@ -268,6 +283,32 @@ export async function markTaskFailed(taskId: string, error: string): Promise<voi
     UPDATE outreach_tasks SET status = 'failed', error = ${error.slice(0, 1000)}, claimed_at = NULL, updated_at = now()
     WHERE id = ${taskId}::uuid
   `;
+}
+
+/**
+ * Emailul cel mai recent către această adresă a fost respins: apare ca eșuat în
+ * panoul de outreach și în „Mesaje trimise”. `sent_at` rămâne, a consumat din plafon.
+ */
+export async function markEmailBounced(leadId: string, email: string, reason: string): Promise<void> {
+  const error = `Email respins: ${reason}`;
+  await sql.transaction([
+    sql`
+      UPDATE outreach_tasks SET status = 'failed', error = ${error}, claimed_at = NULL, updated_at = now()
+      WHERE id = (
+        SELECT id FROM outreach_tasks
+        WHERE lead_id = ${leadId}::uuid AND channel = 'email' AND status = 'sent'
+        ORDER BY sent_at DESC NULLS LAST LIMIT 1
+      )
+    `,
+    sql`
+      UPDATE sent_messages SET status = 'failed', error = ${error}
+      WHERE id = (
+        SELECT id FROM sent_messages
+        WHERE lead_id = ${leadId}::uuid AND channel = 'email' AND status = 'sent' AND LOWER(recipient_email) = ${email}
+        ORDER BY created_at DESC LIMIT 1
+      )
+    `,
+  ]);
 }
 
 /**

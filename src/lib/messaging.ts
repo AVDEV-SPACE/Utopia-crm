@@ -12,10 +12,22 @@ const createTransporter = () =>
     auth: mailboxCredentials(),
   });
 
-const FROM_EMAIL = process.env.EMAIL_FROM_ADDRESS || process.env.GMAIL_USER || 'avdev.space@gmail.com';
+// OUTREACH_GMAIL_USER / OUTREACH_GMAIL_APP_PASSWORD = căsuța firmei pentru tot ce
+// pleacă de aici (outreach + mesaje din CRM). Confirmările de programare au
+// transportul lor și rămân pe contul vechi, deci o problemă de reputație nu le atinge.
+const companyMailbox = (): { user: string; pass: string } | null => {
+  const user = process.env.OUTREACH_GMAIL_USER?.trim();
+  const pass = process.env.OUTREACH_GMAIL_APP_PASSWORD?.trim();
+  return user && pass ? { user, pass } : null;
+};
+
+const fromEmail = () =>
+  companyMailbox()?.user || process.env.EMAIL_FROM_ADDRESS || process.env.GMAIL_USER || 'avdev.space@gmail.com';
 
 /** Contul Gmail în care stau emailurile trimise și răspunsurile (auth SMTP/IMAP). */
 export function mailboxCredentials(): { user: string; pass: string | undefined } {
+  const company = companyMailbox();
+  if (company) return company;
   return {
     user: process.env.GMAIL_USER || process.env.EMAIL_FROM_ADDRESS || 'avdev.space@gmail.com',
     pass: process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS,
@@ -62,8 +74,9 @@ export async function sendEmail(
     throw new Error(`Eroare conexiune SMTP: ${err instanceof Error ? err.message : String(err)}`);
   }
   const usesLogo = html.includes(`cid:${UTOPIA_LOGO_CID}`);
+  const from = fromEmail();
   const info = await transporter.sendMail({
-    from: options.fromName ? { name: options.fromName, address: FROM_EMAIL } : FROM_EMAIL,
+    from: options.fromName ? { name: options.fromName, address: from } : from,
     to,
     subject,
     html,
@@ -148,7 +161,7 @@ export function stripHtml(html: string): string {
 }
 
 export function isEmailConfigured(): boolean {
-  return Boolean(process.env.GMAIL_APP_PASSWORD || process.env.EMAIL_PASS);
+  return Boolean(mailboxCredentials().pass);
 }
 
 export function isSmsConfigured(): boolean {

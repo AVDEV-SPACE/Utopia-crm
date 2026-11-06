@@ -3,9 +3,13 @@ import type { OutreachChannel } from './types';
 /** Fusul orar după care se calculează ferestrele de trimitere și plafoanele. */
 export const OUTREACH_TZ = 'Europe/Bucharest';
 
-/** Trimiterea automată: luni–vineri, 09:00–17:00 ora României. */
-export const SEND_START_HOUR = 9;
-export const SEND_END_HOUR = 17;
+/** Intervalele de trimitere automată [început, sfârșit), ora României. */
+const WEEKDAY_WINDOWS: readonly (readonly [number, number])[] = [
+  [8, 10],
+  [18, 22],
+];
+const WEEKEND_WINDOWS: readonly (readonly [number, number])[] = [[10, 15]];
+export const SEND_WINDOWS_LABEL = 'luni–vineri 08:00–10:00 și 18:00–22:00, weekend 10:00–15:00';
 
 /**
  * Bugetul unei rulări în fundal (planificare, inbox). Rutele cron răspund
@@ -33,6 +37,21 @@ export function dailyCap(channel: OutreachChannel): number {
   return Number.isInteger(raw) && raw >= 0 ? raw : DEFAULT_CAPS[channel];
 }
 
+/** Plafonul de email în primele săptămâni: volumul crește treptat, nu din prima zi. */
+const EMAIL_RAMP = [10, 20, 30];
+const WEEK_MS = 7 * 86_400_000;
+
+/**
+ * Plafonul zilnic de email, ținând cont de creșterea treptată. `firstSentAt` =
+ * prima trimitere reală (`null` = nu a plecat încă niciuna, deci prima săptămână).
+ * După creștere rămâne plafonul din env, care e oricum limita de sus.
+ */
+export function emailSendCap(firstSentAt: Date | null, now = new Date()): number {
+  const cap = dailyCap('email');
+  const week = firstSentAt ? Math.floor((now.getTime() - firstSentAt.getTime()) / WEEK_MS) : 0;
+  return week < EMAIL_RAMP.length ? Math.min(cap, EMAIL_RAMP[week]) : cap;
+}
+
 /** Ziua săptămânii (1 = luni … 7 = duminică) și ora, în ora României. */
 export function bucharestClock(now = new Date()): { weekday: number; hour: number } {
   const parts = new Intl.DateTimeFormat('en-GB', {
@@ -50,9 +69,9 @@ export function bucharestClock(now = new Date()): { weekday: number; hour: numbe
 /** `null` dacă acum se poate trimite, altfel motivul. */
 export function sendWindowBlock(now = new Date()): string | null {
   const { weekday, hour } = bucharestClock(now);
-  if (weekday === 6 || weekday === 7) return 'weekend — trimiterea rulează doar luni–vineri';
-  if (hour < SEND_START_HOUR || hour >= SEND_END_HOUR) {
-    return `în afara intervalului ${SEND_START_HOUR}:00–${SEND_END_HOUR}:00 (${OUTREACH_TZ})`;
+  const windows = weekday >= 6 ? WEEKEND_WINDOWS : WEEKDAY_WINDOWS;
+  if (!windows.some(([start, end]) => hour >= start && hour < end)) {
+    return `în afara intervalelor ${SEND_WINDOWS_LABEL} (${OUTREACH_TZ})`;
   }
   return null;
 }

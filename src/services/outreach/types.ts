@@ -94,5 +94,7 @@ export interface InboxSyncResult {
   /** Răspunsuri la outreach procesate acum (clasificate, secvență oprită/amânată) */
   processed: number;
   outOfOffice: number;
+  /** Emailuri respinse găsite acum (adresă moartă, blocare); secvența lor s-a oprit */
+  bounced: number;
   errors: string[];
 }

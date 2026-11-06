@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requirePipelineOwner } from '@/lib/pipeline-auth';
 import { runOutreachPlan } from '@/services/outreach/plan';
-import { getCampaignAudience } from '@/services/outreach/repository';
-import { allowedRecipients, dailyCap } from '@/services/outreach/schedule';
+import { getCampaignAudience, getEmailSendCap } from '@/services/outreach/repository';
+import { allowedRecipients } from '@/services/outreach/schedule';
 import { getOutreachSettings } from '@/services/outreach/templates';
 
 export const runtime = 'nodejs';
@@ -45,13 +45,13 @@ export async function POST(req: NextRequest) {
   const { filters, preview, limit, exclude } = parsed.data;
   try {
     if (preview) {
-      const [audience, settings] = await Promise.all([getCampaignAudience(filters, allowedRecipients()), getOutreachSettings()]);
+      const [audience, settings, sendCap] = await Promise.all([getCampaignAudience(filters, allowedRecipients()), getOutreachSettings(), getEmailSendCap()]);
       return NextResponse.json({
         audience,
         testMode: allowedRecipients().length > 0,
         // Pasul 1 pe AI cere pitch-ul generat de enrich; cu template, orice lead cu email merge
         step1Template: settings.step1_template_id !== null,
-        sendCap: dailyCap('email'),
+        sendCap,
       });
     }
     return NextResponse.json(await runOutreachPlan(50_000, { filters, limit, exclude }));

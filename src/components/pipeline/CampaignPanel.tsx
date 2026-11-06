@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { ChevronDown, Loader2, Megaphone, Send, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { CampaignAudience } from '@/services/outreach/repository';
+import { SEND_WINDOWS_LABEL } from '@/services/outreach/schedule';
 import type { CampaignFilters, PlanResult } from '@/services/outreach/types';
 import { MultiValueInput } from './MultiValueInput';
 
@@ -28,7 +29,7 @@ const BATCH = 10;
  * coadă, fără secvență) după nișă, oraș și scor, apoi planifici pentru toți
  * secvența de 3 pași (pitch personalizat + 2 follow-up-uri) cu modelele din
  * „Outreach email”. Trimiterea pleacă treptat: jobul outreach-send (sau
- * „Trimite acum”), luni–vineri 09–17, în plafonul zilnic.
+ * „Trimite acum”), în intervalele din `schedule.ts`, în plafonul zilnic.
  */
 export function CampaignPanel({ onChanged }: CampaignPanelProps) {
   const [open, setOpen] = useState(true);
@@ -165,7 +166,7 @@ export function CampaignPanel({ onChanged }: CampaignPanelProps) {
           ) : null}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" disabled={sending || planning !== null} onClick={sendNow} title="Trimite acum pașii ajunși la termen (maximum 2, în intervalul 09–17)">
+          <Button size="sm" variant="outline" disabled={sending || planning !== null} onClick={sendNow} title={`Trimite acum pașii ajunși la termen (maximum 2; ${SEND_WINDOWS_LABEL})`}>
             {sending ? <Loader2 className="animate-spin" /> : <Send />}
             Trimite acum
           </Button>
@@ -283,7 +284,7 @@ export function CampaignPanel({ onChanged }: CampaignPanelProps) {
               </Button>
             )}
             <span className="text-[11px] text-stone-600">
-              Pitch personalizat + 2 follow-up-uri (ziua 4 și 9), cu modelele din „Outreach email”. Pleacă treptat: luni–vineri 09–17,
+              Pitch personalizat + 2 follow-up-uri (ziua 4 și 9), cu modelele din „Outreach email”. Pleacă treptat: {SEND_WINDOWS_LABEL},
               maximum {preview?.sendCap ?? '—'} emailuri/zi; un răspuns oprește secvența.
             </span>
           </div>
