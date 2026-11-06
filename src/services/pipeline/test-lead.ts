@@ -28,15 +28,15 @@ export interface TestLeadInfo {
 
 const refFor = (userId: string) => `test:self:${userId}`;
 
-const PITCH_SUBJECT = 'Test outreach — o idee pentru programările online';
+const PITCH_SUBJECT = 'Test outreach — programările care se pierd seara';
 const PITCH_BODY = [
   'Bună ziua,',
   '',
-  'Acesta e un mesaj de test din Utopia CRM: am observat că programările se fac doar telefonic. Un formular de programare online pe site ar prelua cererile și în afara programului.',
+  'Mesaj de test din Utopia CRM: clienții caută programare seara sau în weekend, iar cererile fără răspuns ajung la concurență.',
   '',
-  'V-ar interesa să vă arăt cum ar arăta? (Răspunde la acest email ca să testezi detectarea răspunsurilor.)',
+  'Construim pe date, nu pe presupuneri: fiecare cerere e măsurată din prima zi. (Răspunde la acest email ca să testezi detectarea răspunsurilor.)',
 ].join('\n');
-const DM = 'Bună! Mesaj de test din Utopia CRM — un formular de programare online ar prelua cererile și în afara programului. Vă arăt cum ar arăta?';
+const DM = 'Bună ziua, mesaj de test din Utopia CRM: cererile fără răspuns seara ajung la concurență. Construim pe date, nu pe presupuneri.';
 
 export async function getTestLead(userId: string): Promise<TestLeadInfo | null> {
   const rows = await sql`

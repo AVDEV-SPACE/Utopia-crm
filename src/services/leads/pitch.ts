@@ -1,25 +1,29 @@
+import { groqJson } from '@/services/engine/groq';
+import { bannedPhrase, COMPANY, factualViolation, nichePain, positioningFacts, withGreeting, WRITING_RULES } from '@/services/engine/positioning';
 import { Lead } from './types';
 import { UTOPIA_SERVICES } from './utopia-services';
 
-const SYSTEM_PROMPT = `Ești un copywriter B2B extrem de direct pentru Utopia Systems. 
-Vei primi: Nume firmă, Nișă, Problema Urgentă a site-ului (chiar dacă scorul e bun, folosește acea problemă minoră găsită), Lista Servicii.
+const SYSTEM_PROMPT = `Ești copywriter B2B pentru ${COMPANY}
+Vei primi: nume firmă, nișă, problema cea mai urgentă a site-ului, durerea tipică a nișei, afirmațiile de expertiză aprobate și lista de servicii.
 
 REGULĂ SUPREMĂ: Răspunzi DOAR cu JSON valid: {"subject": "...", "body": "..."}.
 
-STRUCTURA OBLIGATORIE PENTRU "body" (Nu devia de la acest șablon):
-Trebuie să scrii exact două paragrafe, construite astfel:
+STRUCTURA OBLIGATORIE PENTRU "body" — exact două paragrafe:
 
-[Paragraful 1: Hook + Pain Point]
-Începe direct cu: "Salut echipa [Nume Firmă], am analizat site-ul vostru și am observat [inserează Problema Urgentă din input]." Apoi adaugă o propoziție despre impact: "În domeniul vostru, această problemă tehnică înseamnă [explică pierderea: ex. trafic irosit, pacienți care închid pagina și se programează la concurență, lipsă de încredere]."
+[Paragraful 1: durerea]
+Începe cu „Bună ziua,” și apoi direct cu consecința pentru clienții lor: durerea nișei, legată de problema din input (ex. „În clinicile stomatologice, cele mai multe cereri vin seara — iar un site care nu se încarcă pe mobil le trimite direct la clinica următoare.”). Nu începe cu „Am analizat site-ul” sau „Am observat”.
 
-[Paragraful 2: Soluția + CTA]
-Propune soluția direct: "Cu [inserează un serviciu relevant Utopia] putem elimina acest blocaj. Aveți posibilitatea de a programa o discuție scurtă de 15 minute prin care să elaborăm strategia de remediere?"
+[Paragraful 2: expertiza]
+Sistemul profesional potrivit (un serviciu relevant din listă, descris prin ce face, fără preț), apoi afirmația de expertiză aprobată (fără să-i schimbi sensul sau cifrele). Mesajul se termină cu ea.
+
+${WRITING_RULES}
 
 STRUCTURA OBLIGATORIE PENTRU "subject":
-- CUVINTE INTERZISE STRICT: "Optimizare", "Colaborare", "Ofertă", "Prezentare".
-- REGULĂ: Subiectul trebuie să fie o întrebare sau o constatare bazată DOAR pe problemă. 
-- EXEMPLE BUNE: "Pierdeți pacienți din cauza [Problemei]?", "Am găsit o problemă tehnică pe site-ul [Nume Firmă]".
-- Dacă "channel" nu e email, pune "subject": null.`;
+- CUVINTE INTERZISE STRICT: „Optimizare”, „Colaborare”, „Ofertă”, „Prezentare”.
+- O constatare scurtă despre consecința pentru clienții lor (ex. „Pacienții care caută programare seara”), maximum 8 cuvinte.
+- Dacă "channel" nu e email, pune "subject": null.
+
+Adresare cu „dumneavoastră”, limba română corectă, cu diacritice, maximum 110 cuvinte, fără link-uri.`;
 
 
 interface IssueSummary {
@@ -50,22 +54,12 @@ function summarizeIssues(lead: Lead): IssueSummary {
   return { primary: issues[0], all: issues };
 }
 
-interface GroqChatResponse {
-  choices?: { message?: { content?: string } }[];
-  error?: { message?: string };
-}
-
 export interface GeneratedPitch {
   subject: string | null;
   body: string;
 }
 
 export async function generatePitch(lead: Lead): Promise<GeneratedPitch> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    throw new Error('GROQ_API_KEY nu este setat în .env');
-  }
-
   const servicesList = UTOPIA_SERVICES.map(
     (s) => `- ${s.name} (${s.priceEur} EUR): ${s.description}`
   ).join('\n');
@@ -78,54 +72,54 @@ Locație: ${lead.location ?? 'necunoscută'}
 Canal: ${lead.pitch_channel}
 Cea mai urgentă problemă: ${primary}
 Toate problemele identificate: ${all.length > 0 ? all.join('; ') : 'niciuna'}
+Durerea tipică a nișei: ${nichePain(lead.niche)}
+
+Afirmația de expertiză aprobată (redată complet și fidel):
+${positioningFacts(lead.niche, lead.company_name).dovezi_aprobate.join('\n')}
 
 Servicii Utopia Systems disponibile:
 ${servicesList}
 
 Răspunde doar cu JSON: {"subject": ..., "body": ...}`;
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 300,
-      temperature: 0.7,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userMessage },
-      ],
-    }),
-  });
-
-  const data = (await res.json()) as GroqChatResponse;
-
-  if (!res.ok) {
-    throw new Error(`Groq API ${res.status}: ${data.error?.message ?? 'eroare necunoscută'}`);
+  // O a doua încercare doar când textul folosește o formulare interzisă
+  let rejection: string | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const parsed = await requestPitch(
+      rejection ? `${userMessage}\n\nRăspunsul anterior a fost respins: ${rejection}. Rescrie respectând toate regulile.` : userMessage
+    );
+    const weak = bannedPhrase(parsed.subject ?? '') ?? bannedPhrase(parsed.body);
+    const factual = factualViolation({ email: parsed.body, auditIssues: all.length });
+    if (!weak && !factual) {
+      return {
+        subject: lead.pitch_channel === 'email' ? (parsed.subject?.trim() ?? null) : null,
+        body: withGreeting(parsed.body.trim()),
+      };
+    }
+    rejection = weak ? `folosește formularea interzisă „${weak}”` : factual;
   }
+  throw new Error(`Pitch-ul generat a fost respins: ${rejection}`);
+}
 
-  const raw = data.choices?.[0]?.message?.content;
-  if (!raw) {
-    throw new Error('Groq nu a returnat un răspuns text');
-  }
+const OUTPUT_SCHEMA = {
+  type: 'object',
+  properties: { subject: { type: 'string' }, body: { type: 'string' } },
+  required: ['subject', 'body'],
+  additionalProperties: false,
+};
 
-  let parsed: { subject?: string | null; body?: string };
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('Groq nu a returnat JSON valid pentru pitch');
-  }
+async function requestPitch(userMessage: string): Promise<{ subject?: string | null; body: string }> {
+  const parsed = (await groqJson({
+    system: SYSTEM_PROMPT,
+    user: userMessage,
+    schemaName: 'lead_pitch_legacy',
+    schema: OUTPUT_SCHEMA,
+    maxTokens: 1_000,
+    deadline: Date.now() + 45_000,
+  })) as { subject?: string | null; body?: string };
 
   if (!parsed.body) {
     throw new Error('Răspunsul Groq nu conține "body"');
   }
-
-  return {
-    subject: lead.pitch_channel === 'email' ? (parsed.subject?.trim() ?? null) : null,
-    body: parsed.body.trim(),
-  };
+  return { subject: parsed.subject, body: parsed.body };
 }

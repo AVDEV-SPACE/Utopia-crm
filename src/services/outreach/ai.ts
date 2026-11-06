@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { groqJson } from '@/services/engine/groq';
+import { bannedPhrase, COMPANY, positioningFacts, WRITING_RULES } from '@/services/engine/positioning';
 import { cleanText, LEAKED_JARGON, LINK_PATTERN, wordCount } from '@/services/engine/score';
 import type { OutreachChannel, ReplyIntent } from './types';
 
@@ -8,18 +9,21 @@ import type { OutreachChannel, ReplyIntent } from './types';
  * singur apel ca să economisim tokeni) și clasificarea răspunsurilor.
  */
 
-const FOLLOWUP_SYSTEM = `Scrii follow-up-uri pentru Utopia Systems, o agenție din România (site-uri rapide, agenți AI, automatizări, CRM pentru firme locale).
+const FOLLOWUP_SYSTEM = `Scrii follow-up-uri pentru ${COMPANY}
 Primești primul mesaj trimis unei firme, care nu a răspuns încă.
 
 Scrie două mesaje:
-- followup_2: follow-up scurt, maximum 50 de cuvinte, trimis la 3 zile după primul. Face referire la mesajul anterior („Revin la mesajul meu de acum câteva zile...”) și reia, pe scurt, o singură idee concretă din el.
-- followup_3: ultimul mesaj din secvență, politicos, maximum 50 de cuvinte. Spune că nu mai revii și lasă ușa deschisă („Dacă pe viitor...”).
+- followup_2: maximum 70 de cuvinte, trimis la 3 zile după primul. Nu repeta primul mesaj și nu începe cu „Revin la mesajul meu”: adaugă un unghi nou al aceleiași dureri (durere_nisa) — ce înseamnă pentru clienții lor — apoi o afirmație de expertiză din dovezi_aprobate, alta decât cea din primul mesaj.
+- followup_3: ultimul mesaj, maximum 45 de cuvinte. Scurt și sigur pe el: închide subiectul („Nu vă mai scriu pe acest subiect”) și încheie cu o afirmație de expertiză din dovezi_aprobate.
 
-Reguli stricte:
-- Folosește DOAR ce apare în primul mesaj. Nu inventa cifre, clienți, rezultate sau probleme noi.
+Reguli despre fapte:
+- Folosește DOAR ce apare în primul mesaj, durere_nisa și dovezi_aprobate. Nu inventa cifre, clienți, rezultate sau probleme noi.
+
+${WRITING_RULES}
+
+Format:
 - Adresare cu „dumneavoastră”, limba română corectă, cu diacritice. Începe cu „Bună ziua”.
-- Fără link-uri, fără URL-uri, fără semnătură (se adaugă automat).
-- CTA de interes, nu cerere de call sau întâlnire.
+- Fără link-uri, fără URL-uri, fără semnătură.
 
 Răspunde doar cu JSON: {"followup_2", "followup_3"}.`;
 
@@ -33,7 +37,7 @@ const FOLLOWUP_SCHEMA = {
   additionalProperties: false,
 };
 
-const MAX_FOLLOWUP_WORDS = 60;
+const MAX_FOLLOWUP_WORDS = 100;
 
 const followupOutput = z.object({
   followup_2: z.string().transform(cleanText).pipe(z.string().min(1).max(800)),
@@ -56,7 +60,7 @@ export async function generateFollowups(
 ): Promise<{ step2: string; step3: string }> {
   const raw = await groqJson({
     system: FOLLOWUP_SYSTEM,
-    user: `Date (JSON):\n${JSON.stringify(facts)}`,
+    user: `Date (JSON):\n${JSON.stringify({ ...facts, ...positioningFacts(facts.nisa) })}`,
     schemaName: 'outreach_followups',
     schema: FOLLOWUP_SCHEMA,
     maxTokens: 800,
@@ -71,6 +75,8 @@ export async function generateFollowups(
     if (wordCount(text) > MAX_FOLLOWUP_WORDS) throw new Error(`Follow-up prea lung (${wordCount(text)} cuvinte)`);
     if (LINK_PATTERN.test(text)) throw new Error('Follow-up-ul conține link-uri');
     if (LEAKED_JARGON.test(text)) throw new Error('Follow-up-ul conține formulări interne');
+    const weak = bannedPhrase(text);
+    if (weak) throw new Error(`Follow-up-ul folosește o formulare interzisă („${weak}”)`);
   }
   return { step2, step3 };
 }
@@ -154,13 +160,16 @@ export function stageForIntent(intent: ReplyIntent | null): string | null {
 
 // ── Ajustarea unui mesaj din fișa lead-ului ────────────────────────────────
 
-const REWRITE_SYSTEM = `Ajustezi un mesaj de prospectare al Utopia Systems (agenție din România: site-uri rapide, agenți AI, automatizări, CRM pentru firme locale), după instrucțiunea utilizatorului.
-Primești: canalul, mesajul actual (și subiectul, la email), instrucțiunea și faptele verificate despre firmă.
+const REWRITE_SYSTEM = `Ajustezi un mesaj de prospectare al ${COMPANY}
+Ajustarea se face după instrucțiunea utilizatorului. Primești: canalul, mesajul actual (și subiectul, la email), instrucțiunea și faptele verificate despre firmă (inclusiv durere_nisa și dovezi_aprobate).
+
+${WRITING_RULES}
+Instrucțiunea utilizatorului are prioritate la ton și lungime, dar nu la regulile despre fapte și formulările interzise.
 
 Reguli stricte:
-- Aplică instrucțiunea, dar folosește DOAR faptele primite și ce apare în mesajul actual. Nu inventa cifre, clienți, rezultate, prețuri sau probleme.
+- Aplică instrucțiunea, dar folosește DOAR faptele primite, dovezi_aprobate și ce apare în mesajul actual. Nu inventa cifre, clienți, rezultate, prețuri sau probleme.
 - Limba română corectă, cu diacritice. Păstrează forma de adresare din mesajul actual, dacă instrucțiunea nu cere altfel.
-- Nu adăuga link-uri sau URL-uri care nu existau deja. Fără semnătură (se adaugă automat).
+- Nu adăuga link-uri sau URL-uri care nu existau deja. Fără semnătură.
 - Pe Instagram, Facebook, LinkedIn, WhatsApp și SMS: mesaj scurt, conversațional, fără subiect.
 - subject: doar pentru email (altfel șir gol), maximum 80 de caractere.
 Răspunde doar cu JSON: {"subject", "body"}.`;
@@ -197,6 +206,7 @@ export async function rewriteMessage(input: RewriteInput, deadline: number): Pro
       mesaj_actual: input.body.slice(0, 6000),
       instructiune: input.instruction.slice(0, 500),
       fapte: input.facts,
+      ...positioningFacts(typeof input.facts.nisa === 'string' ? input.facts.nisa : null),
     })}`,
     schemaName: 'message_rewrite',
     schema: REWRITE_SCHEMA,
@@ -212,6 +222,8 @@ export async function rewriteMessage(input: RewriteInput, deadline: number): Pro
   if (wordCount(body) > max) throw new Error(`Mesajul ajustat e prea lung (${wordCount(body)} cuvinte, maxim ${max}) — cere o variantă mai scurtă`);
   if (!LINK_PATTERN.test(input.body) && LINK_PATTERN.test(body)) throw new Error('AI-ul a adăugat link-uri — încearcă din nou');
   if (LEAKED_JARGON.test(body) || LEAKED_JARGON.test(subject)) throw new Error('Mesajul ajustat conține formulări interne — încearcă din nou');
+  const weak = bannedPhrase(`${subject}\n${body}`);
+  if (weak) throw new Error(`Mesajul ajustat folosește o formulare interzisă („${weak}”) — încearcă din nou`);
 
   return { subject: input.channel === 'email' ? subject || input.subject : null, body };
 }
