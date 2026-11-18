@@ -36,6 +36,10 @@ const isPublicRoute = createRouteMatcher([
   // aleator din URL (48 hex, validat în handler) e singura autorizare.
   '/api/t/o/(.*)',
   '/api/t/u/(.*)',
+  // Monitorizarea externă (Better Stack, CI). Varianta completă (?deep=1) cere
+  // `Authorization: Bearer HEALTH_TOKEN` în handler (lib/health).
+  '/api/health/live',
+  '/api/health/ready',
 ]);
 
 const isAssistantRoute = createRouteMatcher(['/appointments(.*)']);
@@ -62,7 +66,9 @@ export default clerkMiddleware(async (auth, req) => {
   if (!userId) {
     if (isApi) return NextResponse.json({ error: 'Neautentificat' }, { status: 401 });
     const signInUrl = new URL('/auth/sign-in', req.url);
-    signInUrl.searchParams.set('redirect_url', pathname);
+    // Cu query cu tot: linkul din notificări (/messaging?session=…) trebuie să
+    // ducă după login la aceeași conversație, nu doar la listă.
+    signInUrl.searchParams.set('redirect_url', pathname + req.nextUrl.search);
     return NextResponse.redirect(signInUrl);
   }
 

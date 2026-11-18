@@ -10,6 +10,8 @@ const nextConfig = {
   // platformă: se încarcă din node_modules la runtime, nu se împachetează.
   experimental: {
     serverComponentsExternalPackages: ['@duckdb/node-api', '@duckdb/node-bindings'],
+    // src/instrumentation.ts (pornirea Sentry pe server) e opt-in pe Next 14
+    instrumentationHook: true,
   },
 
   // Antete de securitate pe toate rutele. Fără CSP strict: Clerk, GA și
@@ -32,4 +34,17 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+/* Sentry doar pe server/edge (src/instrumentation.ts) — fără sentry.client.config.ts
+   nu se injectează nimic în browser. Source maps-urile se urcă doar cu
+   SENTRY_AUTH_TOKEN setat; fără el, build-ul merge normal. */
+const { withSentryConfig } = require('@sentry/nextjs/config')
+
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  telemetry: false,
+})

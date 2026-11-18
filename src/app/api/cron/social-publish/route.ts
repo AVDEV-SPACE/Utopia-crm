@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { checkCronSecret } from '@/lib/cron-auth';
+import { pingHeartbeat } from '@/lib/heartbeat';
 import { publishDuePosts } from '@/services/social/publish';
 
 export const runtime = 'nodejs';
@@ -21,8 +22,14 @@ export async function POST(req: NextRequest) {
 
   waitUntil(
     publishDuePosts(BUDGET_MS)
-      .then((result) => console.log('Cron social-publish:', JSON.stringify(result)))
-      .catch((error) => console.error('Cron social-publish eșuat:', error))
+      .then((result) => {
+        console.log('Cron social-publish:', JSON.stringify(result));
+        return pingHeartbeat('social-publish');
+      })
+      .catch((error) => {
+        console.error('Cron social-publish eșuat:', error);
+        return pingHeartbeat('social-publish', false);
+      })
   );
   return NextResponse.json({ started: true }, { status: 202 });
 }
