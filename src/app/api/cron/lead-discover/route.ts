@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { checkCronSecret } from '@/lib/cron-auth';
+import { pingHeartbeat } from '@/lib/heartbeat';
 import { runDiscover } from '@/services/engine/run';
 
 export const runtime = 'nodejs';
@@ -32,13 +33,18 @@ export async function POST(req: NextRequest) {
   // Programatorul extern poate întârzia; garda pe oră e aici, nu doar în cron
   const hour = bucharestHour();
   if (hour < START_HOUR || hour >= END_HOUR) {
+    // Și noaptea: heartbeat-ul confirmă că programatorul rulează, nu că a găsit ceva
+    await pingHeartbeat('lead-discover');
     return NextResponse.json({ skipped: `în afara intervalului ${START_HOUR}:00–${END_HOUR}:00 (Europe/Bucharest)` });
   }
 
   waitUntil(
-    runDiscover('cron').catch((error) => {
-      console.error('Cron lead-discover eșuat:', error);
-    })
+    runDiscover('cron')
+      .then(() => pingHeartbeat('lead-discover'))
+      .catch((error) => {
+        console.error('Cron lead-discover eșuat:', error);
+        return pingHeartbeat('lead-discover', false);
+      })
   );
   return NextResponse.json({ started: true }, { status: 202 });
 }

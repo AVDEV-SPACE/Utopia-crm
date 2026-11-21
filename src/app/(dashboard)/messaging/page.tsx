@@ -85,6 +85,15 @@ export default function MessagingPage() {
     fetchSessions();
   }, [fetchSessions]);
 
+  // Link direct din notificarea Telegram: /messaging?session=<id> deschide conversația
+  useEffect(() => {
+    const sessionId = new URLSearchParams(window.location.search).get('session');
+    if (!sessionId) return;
+    selectedRef.current = sessionId;
+    setSelectedId(sessionId);
+    fetchMessages(sessionId);
+  }, [fetchMessages]);
+
   useLiveRefresh(
     useCallback(async () => {
       const open = selectedRef.current;

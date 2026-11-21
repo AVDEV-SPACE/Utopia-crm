@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { checkCronSecret } from '@/lib/cron-auth';
+import { pingHeartbeat } from '@/lib/heartbeat';
 import { runEnrich } from '@/services/engine/run';
 
 export const runtime = 'nodejs';
@@ -20,9 +21,12 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   waitUntil(
-    runEnrich('cron').catch((error) => {
-      console.error('Cron lead-enrich eșuat:', error);
-    })
+    runEnrich('cron')
+      .then(() => pingHeartbeat('lead-enrich'))
+      .catch((error) => {
+        console.error('Cron lead-enrich eșuat:', error);
+        return pingHeartbeat('lead-enrich', false);
+      })
   );
   return NextResponse.json({ started: true }, { status: 202 });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { checkCronSecret } from '@/lib/cron-auth';
+import { pingHeartbeat } from '@/lib/heartbeat';
 import { runInboxSync } from '@/services/outreach/inbox';
 import { BACKGROUND_BUDGET_MS } from '@/services/outreach/schedule';
 
@@ -19,8 +20,14 @@ export async function POST(req: NextRequest) {
 
   waitUntil(
     runInboxSync(BACKGROUND_BUDGET_MS)
-      .then((result) => console.log('Cron inbox-sync:', JSON.stringify(result)))
-      .catch((error) => console.error('Cron inbox-sync eșuat:', error))
+      .then((result) => {
+        console.log('Cron inbox-sync:', JSON.stringify(result));
+        return pingHeartbeat('inbox-sync');
+      })
+      .catch((error) => {
+        console.error('Cron inbox-sync eșuat:', error);
+        return pingHeartbeat('inbox-sync', false);
+      })
   );
   return NextResponse.json({ started: true }, { status: 202 });
 }

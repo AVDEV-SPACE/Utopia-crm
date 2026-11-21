@@ -20,6 +20,7 @@
     "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@sendgrid/mail": "^8.1.6",
+    "@sentry/nextjs": "11.10.0",
     "@vercel/blob": "^2.8.2",
     "@vercel/functions": "3.10.0",
     "class-variance-authority": "^0.7.1",

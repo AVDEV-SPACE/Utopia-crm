@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { checkCronSecret } from '@/lib/cron-auth';
+import { pingHeartbeat } from '@/lib/heartbeat';
 import { runOutreachPlan } from '@/services/outreach/plan';
 import { BACKGROUND_BUDGET_MS } from '@/services/outreach/schedule';
 
@@ -18,8 +19,14 @@ export async function POST(req: NextRequest) {
 
   waitUntil(
     runOutreachPlan(BACKGROUND_BUDGET_MS)
-      .then((result) => console.log('Cron outreach-plan:', JSON.stringify(result)))
-      .catch((error) => console.error('Cron outreach-plan eșuat:', error))
+      .then((result) => {
+        console.log('Cron outreach-plan:', JSON.stringify(result));
+        return pingHeartbeat('outreach-plan');
+      })
+      .catch((error) => {
+        console.error('Cron outreach-plan eșuat:', error);
+        return pingHeartbeat('outreach-plan', false);
+      })
   );
   return NextResponse.json({ started: true }, { status: 202 });
 }

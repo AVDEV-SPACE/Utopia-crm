@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkCronSecret } from '@/lib/cron-auth';
+import { pingHeartbeat } from '@/lib/heartbeat';
 import { runOutreachSend } from '@/services/outreach/send';
 
 export const runtime = 'nodejs';
@@ -16,9 +17,12 @@ export async function POST(req: NextRequest) {
   if (denied) return denied;
 
   try {
-    return NextResponse.json(await runOutreachSend(req.nextUrl.origin));
+    const result = await runOutreachSend(req.nextUrl.origin);
+    await pingHeartbeat('outreach-send');
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Cron outreach-send eșuat:', error);
+    await pingHeartbeat('outreach-send', false);
     return NextResponse.json({ error: (error as Error).message }, { status: 500 });
   }
 }
