@@ -2,22 +2,25 @@
 
 import { useState } from 'react';
 import { Linkedin } from 'lucide-react';
+import { MediaLibrary } from '@/components/socials/MediaLibrary';
 import { SocialInbox } from '@/components/socials/SocialInbox';
 import { SocialPosts } from '@/components/socials/SocialPosts';
 import { SocialSettings } from '@/components/socials/SocialSettings';
 
-type Tab = 'inbox' | 'posts' | 'settings' | 'linkedin';
+type Tab = 'inbox' | 'posts' | 'media' | 'settings' | 'linkedin';
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'inbox', label: 'Inbox' },
   { value: 'posts', label: 'Postări' },
+  { value: 'media', label: 'Media' },
   { value: 'settings', label: 'Setări' },
   { value: 'linkedin', label: 'LinkedIn' },
 ];
 
 /**
  * /socials: Facebook Page + Instagram Business în CRM — inbox (DM-uri și
- * comentarii, cu auto-reply AI pe mesajele primite), postări programate și
+ * comentarii, cu auto-reply AI pe mesajele primite), postări programate (text,
+ * imagine, carusel, video), biblioteca media și
  * starea conexiunii. LinkedIn: în așteptarea aprobării API-ului.
  */
 export default function SocialsPage() {
@@ -51,6 +54,11 @@ export default function SocialsPage() {
 
       {tab === 'inbox' && <SocialInbox />}
       {tab === 'posts' && <SocialPosts />}
+      {tab === 'media' && (
+        <section className="rounded-xl border border-stone-800/60 bg-stone-900/60 p-4">
+          <MediaLibrary />
+        </section>
+      )}
       {tab === 'settings' && <SocialSettings />}
       {tab === 'linkedin' && (
         <div className="flex items-start gap-3 rounded-xl border border-stone-800/60 bg-stone-900/60 p-5">

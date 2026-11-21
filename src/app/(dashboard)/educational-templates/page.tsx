@@ -8,8 +8,12 @@ import { Lead } from '@/services/leads/types';
 import AddClientModal from '@/components/AddClientModal';
 import { SentMessagesTable } from '@/components/messages/SentMessagesTable';
 import { LeadDetailDialog } from '@/components/leads/LeadDetailDialog';
+import { useLiveRefresh } from '@/hooks/use-live-refresh';
+import { PageSkeleton } from '@/components/ui/skeleton';
 
 export const dynamic = 'force-dynamic';
+
+const REFRESH_MS = 30_000;
 
 interface Template {
   id: string;
@@ -161,8 +165,8 @@ export default function EducationalTemplatesPage() {
       const data = await response.json();
       setLeads(data || []);
     } catch (error) {
+      // Lista rămâne cea anterioară — o eroare trecătoare la reîncărcare n-o golește
       console.error('Error fetching leads:', error);
-      setLeads([]);
     }
   };
 
@@ -293,7 +297,6 @@ Dispar și notele lui din istoric. Acțiunea nu poate fi anulată.`
       setScheduledMessages(data || []);
     } catch (error) {
       console.error('Error fetching scheduled messages:', error);
-      setScheduledMessages([]);
     }
   };
 
@@ -448,6 +451,14 @@ Dispar și notele lui din istoric. Acțiunea nu poate fi anulată.`
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceFilter, timeFilter]);
 
+  // Programările trimise între timp, lead-urile și clienții noi apar fără refresh.
+  // Șabloanele nu se reîncarcă: le editează doar utilizatorul de pe pagina asta.
+  // Selecția rămâne — reîncărcarea doar adaugă/actualizează rânduri.
+  useLiveRefresh(
+    () => Promise.all([fetchScheduledMessages(), fetchLeads(), fetchClients()]),
+    REFRESH_MS
+  );
+
   useEffect(() => {
     setSelectedLeadIds([]);
   }, [leadNicheFilter, leadScoreFilter]);
@@ -463,12 +474,7 @@ Dispar și notele lui din istoric. Acțiunea nu poate fi anulată.`
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex items-center gap-3 text-stone-500">
-          <div className="w-5 h-5 border-2 border-stone-700 border-t-amber-500 rounded-full animate-spin" />
-          <span>Se încarcă șabloanele...</span>
-        </div>
-      </div>
+      <PageSkeleton />
     );
   }
 

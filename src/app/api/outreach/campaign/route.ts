@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requirePipelineOwner } from '@/lib/pipeline-auth';
 import { runOutreachPlan } from '@/services/outreach/plan';
 import { getCampaignAudience, getEmailSendCap } from '@/services/outreach/repository';
-import { allowedRecipients } from '@/services/outreach/schedule';
+import { allowedRecipients, sendWindowsLabel } from '@/services/outreach/schedule';
 import { getOutreachSettings } from '@/services/outreach/templates';
 
 export const runtime = 'nodejs';
@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
         // Pasul 1 pe AI cere pitch-ul generat de enrich; cu template, orice lead cu email merge
         step1Template: settings.step1_template_id !== null,
         sendCap,
+        sendWindows: sendWindowsLabel(),
       });
     }
     return NextResponse.json(await runOutreachPlan(50_000, { filters, limit, exclude }));

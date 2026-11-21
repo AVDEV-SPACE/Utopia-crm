@@ -3,6 +3,7 @@ import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
+import { PageTransition, TransitionProvider } from '@/components/motion/PageTransition';
 
 export default function DashboardLayout({
   children,
@@ -43,20 +44,25 @@ export default function DashboardLayout({
           `,
         }}
       />
-      <div className="flex h-screen bg-stone-900 text-gray-100">
-        <Sidebar />
+      {/* Fundalul cu lumini difuze stă sub tot layout-ul; wrapper-ele de mai jos sunt transparente */}
+      <div className="app-backdrop" aria-hidden />
+      <TransitionProvider>
+        <div className="flex h-screen text-gray-100">
+          <Sidebar />
 
-        <div className="flex-1 flex flex-col overflow-hidden bg-stone-900">
-          {/* Header cu search si add client */}
-          <Header />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Header cu search si add client */}
+            <Header />
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-6 lg:p-8">
-            {children}
+            <main className="flex-1 overflow-y-auto">
+              <div className="p-6 lg:p-8">
+                {/* Doar conținutul rutei se animă; sidebar-ul și header-ul rămân fixe */}
+                <PageTransition>{children}</PageTransition>
+              </div>
+            </main>
           </div>
-        </main>
         </div>
-      </div>
+      </TransitionProvider>
       <Toaster />
     </ThemeProvider>
   );

@@ -123,7 +123,7 @@ export function ImportForm({ onImported }: ImportFormProps) {
     'w-full h-8 rounded-md border border-stone-800 bg-stone-950/60 px-2 text-xs text-stone-200';
 
   return (
-    <div className="bg-stone-900/60 border border-stone-800/60 rounded-xl p-4 space-y-4">
+    <div className="space-y-4">
       {/* Selectorul de sursă */}
       <div className="flex items-center gap-1.5">
         {(['url', 'file'] as Tab[]).map((value) => (

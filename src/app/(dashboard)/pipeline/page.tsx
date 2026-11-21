@@ -1,11 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Send, X } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef, Suspense, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { CategoryFilter } from '@/components/leads/CategoryFilter';
-import { ImportForm } from '@/components/leads/ImportForm';
 import { SentMessagesTable } from '@/components/messages/SentMessagesTable';
 import { PipelineTable } from '@/components/pipeline/PipelineTable';
 import { PipelineDetailSheet } from '@/components/pipeline/PipelineDetailSheet';
@@ -14,18 +11,25 @@ import { OutreachPanel } from '@/components/pipeline/OutreachPanel';
 import { CampaignPanel } from '@/components/pipeline/CampaignPanel';
 import { TestLeadButton } from '@/components/pipeline/TestLeadButton';
 import { Button } from '@/components/ui/button';
+import { CountUp } from '@/components/motion/CountUp';
+import { SegmentedControl } from '@/components/motion/SegmentedControl';
+import {
+  ALL,
+  ActiveFilterChips,
+  FilterSelect,
+  SearchField,
+  type ActiveChip,
+  type FilterOption,
+} from '@/components/filters/FilterControls';
 import { useOutreachAutoSync } from '@/hooks/use-outreach-auto-sync';
+import { useUrlFilters, withoutParam } from '@/hooks/use-url-filters';
+import { fetchJson, peek } from '@/lib/data-cache';
 import { STAGE_LABELS, PIPELINE_STAGES } from '@/services/pipeline/stages';
 import type { PipelineFacets, PipelineKpi, PipelineLeadRow } from '@/services/pipeline/types';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 50;
-
-interface Option {
-  value: string;
-  label: string;
-}
 
 /** Etichete pentru sursele stocate în `leads.source`. */
 const SOURCE_LABELS: Record<string, string> = {
@@ -39,15 +43,13 @@ const SOURCE_LABELS: Record<string, string> = {
   instagram: 'Instagram',
 };
 
-const ICP_OPTIONS: Option[] = [
-  { value: 'all', label: 'Toate' },
+const ICP_OPTIONS: FilterOption[] = [
   { value: '1', label: 'Da' },
   { value: '0', label: 'Nu' },
 ];
 
 /** Praguri pe nota Google (0–5). */
-const RATING_OPTIONS: Option[] = [
-  { value: 'all', label: 'Toate' },
+const RATING_OPTIONS: FilterOption[] = [
   { value: '4.5', label: '★ 4.5+' },
   { value: '4', label: '★ 4+' },
   { value: '3', label: '★ 3+' },
@@ -55,17 +57,16 @@ const RATING_OPTIONS: Option[] = [
 ];
 
 /** Intervale pe scor (0–100). */
-const SCORE_OPTIONS: Option[] = [
-  { value: 'all', label: 'Toate' },
+const SCORE_OPTIONS: FilterOption[] = [
   { value: '70', label: '70+' },
   { value: '40', label: '40+' },
   { value: 'lt40', label: 'sub 40' },
   { value: 'none', label: 'Fără scor' },
 ];
 
-const SORT_OPTIONS: Option[] = [
+const SORT_OPTIONS: FilterOption[] = [
   { value: 'date', label: 'Cele mai noi' },
-  { value: 'score', label: 'Scor' },
+  { value: 'score', label: 'Scor ↓' },
 ];
 
 const EMPTY_KPI: PipelineKpi = {
@@ -79,6 +80,59 @@ const EMPTY_KPI: PipelineKpi = {
 };
 
 const EMPTY_FACETS: PipelineFacets = { cities: [], segments: [], stages: [], niches: [], categories: [], sources: [] };
+
+/** Filtrele din URL; `view=pitched` vine și din cardul „Pitched” de pe Overview. */
+const FILTER_DEFAULTS = {
+  view: 'leads',
+  q: '',
+  source: ALL,
+  stage: ALL,
+  segment: ALL,
+  icp: ALL,
+  score: ALL,
+  rating: ALL,
+  city: ALL,
+  niche: ALL,
+  category: ALL,
+  sort: 'date',
+} as const;
+
+type FilterKey = keyof typeof FILTER_DEFAULTS;
+
+interface PipelineResponse {
+  leads: PipelineLeadRow[];
+  total: number;
+  kpi: PipelineKpi;
+  facets: PipelineFacets;
+}
+
+/**
+ * URL-ul listei pentru filtrele și pagina date. E și cheia din cache-ul de date:
+ * pentru filtrele implicite dă exact `PAGE_DATA.pipeline` (preload-ul din sidebar).
+ */
+function pipelineUrl(f: Record<FilterKey, string>, page: number): string {
+  const params = new URLSearchParams({
+    limit: String(PAGE_SIZE),
+    offset: String(page * PAGE_SIZE),
+    sort: f.sort,
+  });
+  if (f.q.trim()) params.set('q', f.q.trim());
+  if (f.source !== ALL) params.set('source', f.source);
+  if (f.stage !== ALL) params.set('stage', f.stage);
+  if (f.segment !== ALL) params.set('segment', f.segment);
+  if (f.icp !== ALL) params.set('icp', f.icp);
+  if (f.rating !== ALL) params.set('rating', f.rating);
+  // „sub 40” e o limită superioară, restul opțiunilor sunt praguri minime
+  if (f.score === 'lt40') params.set('scoreMax', '39');
+  else if (f.score !== ALL) params.set('score', f.score);
+  if (f.city !== ALL) params.set('city', f.city);
+  if (f.niche !== ALL) params.set('niche', f.niche);
+  if (f.category !== ALL) params.set('category', f.category);
+  return `/api/pipeline/manage?${params}`;
+}
+
+const asOptions = (values: string[], labels?: Record<string, string>): FilterOption[] =>
+  values.map((v) => ({ value: v, label: labels?.[v] ?? v }));
 
 export default function PipelinePage() {
   // `useSearchParams` are nevoie de o graniță Suspense la randare
@@ -96,30 +150,23 @@ export default function PipelinePage() {
  */
 function PipelineContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const [leads, setLeads] = useState<PipelineLeadRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [kpi, setKpi] = useState<PipelineKpi>(EMPTY_KPI);
-  const [facets, setFacets] = useState<PipelineFacets>(EMPTY_FACETS);
-  const [loading, setLoading] = useState(true);
   // Deep-link: /pipeline?lead=<id> deschide direct fișa
   const [activeId, setActiveId] = useState<string | null>(() => searchParams.get('lead'));
-  // Deep-link din cardul „Pitched” de pe Overview: /pipeline?view=pitched
-  const [showPitched, setShowPitched] = useState(() => searchParams.get('view') === 'pitched');
-
-  const [search, setSearch] = useState('');
-  const [source, setSource] = useState('all');
-  const [stage, setStage] = useState('all');
-  const [segment, setSegment] = useState('all');
-  const [icp, setIcp] = useState('all');
-  const [score, setScore] = useState('all');
-  const [rating, setRating] = useState('all');
-  const [city, setCity] = useState('all');
-  const [niche, setNiche] = useState('all');
-  const [category, setCategory] = useState('all');
-  const [sort, setSort] = useState('date');
+  const { values: f, set, reset } = useUrlFilters<FilterKey>(FILTER_DEFAULTS);
   const [page, setPage] = useState(0);
+  const showPitched = f.view === 'pitched';
+
+  // Răspunsul din cache pentru filtrele de la intrare (vizită anterioară sau
+  // preload la hover pe sidebar): lista și KPI-urile apar instant, fără skeleton.
+  const [initial] = useState(() => peek<PipelineResponse>(pipelineUrl(f, 0)));
+  const [leads, setLeads] = useState<PipelineLeadRow[]>(initial?.leads ?? []);
+  const [total, setTotal] = useState(initial?.total ?? 0);
+  const [kpi, setKpi] = useState<PipelineKpi>(initial?.kpi ?? EMPTY_KPI);
+  const [facets, setFacets] = useState<PipelineFacets>(initial?.facets ?? EMPTY_FACETS);
+  const [loading, setLoading] = useState(!initial);
 
   // Ultimul request în zbor: un răspuns lent pentru o căutare veche nu are voie
   // să suprascrie lista unei căutări mai noi.
@@ -130,32 +177,12 @@ function PipelineContent() {
     const controller = new AbortController();
     inFlight.current = controller;
 
-    const params = new URLSearchParams({
-      limit: String(PAGE_SIZE),
-      offset: String(page * PAGE_SIZE),
-      sort,
-    });
-    if (search.trim()) params.set('q', search.trim());
-    if (source !== 'all') params.set('source', source);
-    if (stage !== 'all') params.set('stage', stage);
-    if (segment !== 'all') params.set('segment', segment);
-    if (icp !== 'all') params.set('icp', icp);
-    if (rating !== 'all') params.set('rating', rating);
-    // „sub 40” e o limită superioară, restul opțiunilor sunt praguri minime
-    if (score === 'lt40') params.set('scoreMax', '39');
-    else if (score !== 'all') params.set('score', score);
-    if (city !== 'all') params.set('city', city);
-    if (niche !== 'all') params.set('niche', niche);
-    if (category !== 'all') params.set('category', category);
-
     try {
-      const res = await fetch(`/api/pipeline/manage?${params}`, { signal: controller.signal });
-      if (!res.ok) throw new Error('Nu am putut încărca leadurile');
-      const data = await res.json();
-      setLeads(data.leads as PipelineLeadRow[]);
-      setTotal(data.total as number);
-      setKpi(data.kpi as PipelineKpi);
-      setFacets(data.facets as PipelineFacets);
+      const data = await fetchJson<PipelineResponse>(pipelineUrl(f, page), { signal: controller.signal });
+      setLeads(data.leads);
+      setTotal(data.total);
+      setKpi(data.kpi);
+      setFacets(data.facets);
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       console.error(err);
@@ -163,14 +190,16 @@ function PipelineContent() {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [search, source, stage, segment, icp, rating, score, city, niche, category, sort, page]);
+    // `f` se schimbă doar când se schimbă un filtru; lista de mai jos e cea care contează
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.q, f.source, f.stage, f.segment, f.icp, f.rating, f.score, f.city, f.niche, f.category, f.sort, page]);
 
   // Debounce pe căutare; filtrele și paginarea se aplică imediat.
   useEffect(() => {
     setLoading(true);
-    const timer = setTimeout(fetchLeads, search.trim() ? 300 : 0);
+    const timer = setTimeout(fetchLeads, f.q.trim() ? 300 : 0);
     return () => clearTimeout(timer);
-  }, [fetchLeads, search]);
+  }, [fetchLeads, f.q]);
 
   // Răspunsurile și deschiderile schimbă etapele în fundal: lista se reîmprospătează singură
   useOutreachAutoSync(fetchLeads);
@@ -178,39 +207,55 @@ function PipelineContent() {
   // Orice filtru schimbat repornește paginarea, altfel un offset vechi dă o pagină goală.
   useEffect(() => {
     setPage(0);
-  }, [search, source, stage, segment, icp, rating, score, city, niche, category, sort]);
+  }, [f.q, f.source, f.stage, f.segment, f.icp, f.rating, f.score, f.city, f.niche, f.category, f.sort]);
 
   function closeDetail() {
     setActiveId(null);
-    if (searchParams.get('lead')) router.replace('/pipeline', { scroll: false });
+    // Doar parametrul `lead` dispare; filtrele din URL rămân
+    if (searchParams.get('lead')) router.replace(withoutParam(pathname, 'lead'), { scroll: false });
   }
 
-  /** Orice filtru schimbat închide vizualizarea „Pitched”, care ignoră filtrele. */
-  const applyFilter = (setter: (value: string) => void) => (value: string) => {
-    setter(value);
-    setShowPitched(false);
+  /** Orice filtru schimbat închide vizualizarea „Jurnal”, care ignoră filtrele. */
+  const setFilter = (key: FilterKey) => (value: string) => {
+    set(key, value);
+    if (key !== 'sort') set('view', 'leads');
   };
 
   // Etapele de filtrat: ordinea pâlniei, doar cele care chiar apar în date
-  const stageOptions: Option[] = [
-    { value: 'all', label: 'Toate' },
+  const stageOptions: FilterOption[] = [
     ...PIPELINE_STAGES.filter((s) => facets.stages.includes(s)).map((s) => ({ value: s, label: STAGE_LABELS[s] })),
     // Etape necunoscute venite din import rămân filtrabile
     ...facets.stages
       .filter((s) => !(PIPELINE_STAGES as readonly string[]).includes(s))
       .map((s) => ({ value: s, label: s })),
   ];
+  const sourceOptions = asOptions(facets.sources, SOURCE_LABELS);
 
-  const hasFilters =
-    search.trim() !== '' ||
-    [source, stage, segment, icp, rating, score, city, niche, category].some((value) => value !== 'all');
+  const labelOf = (options: FilterOption[], value: string) => options.find((o) => o.value === value)?.label ?? value;
+  const chipFor = (key: FilterKey, name: string, options?: FilterOption[]): ActiveChip | null =>
+    f[key] !== ALL && f[key] !== ''
+      ? { key, label: `${name}: ${options ? labelOf(options, f[key]) : f[key]}`, onRemove: () => set(key, ALL) }
+      : null;
+  const chips = [
+    f.q.trim() ? { key: 'q', label: `„${f.q.trim()}”`, onRemove: () => set('q', '') } : null,
+    chipFor('source', 'Sursă', sourceOptions),
+    chipFor('stage', 'Etapă', stageOptions),
+    chipFor('segment', 'Segment'),
+    chipFor('icp', 'ICP', ICP_OPTIONS),
+    chipFor('score', 'Scor', SCORE_OPTIONS),
+    chipFor('rating', 'Rating', RATING_OPTIONS),
+    chipFor('city', 'Oraș'),
+    chipFor('niche', 'Nișă'),
+    chipFor('category', 'Categorie'),
+  ].filter((c): c is ActiveChip => c !== null);
 
+  const hasFilters = chips.length > 0;
   const lastPage = Math.max(Math.ceil(total / PAGE_SIZE) - 1, 0);
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
+        <div className="max-w-3xl">
           <h1 className="page-title text-stone-100">Pipeline leaduri</h1>
           <p className="text-sm text-stone-500">
             Toate leadurile la un loc — găsite de motor, importate (Google Sheet, CSV) sau venite din site și apeluri —
@@ -220,106 +265,73 @@ function PipelineContent() {
         <TestLeadButton onOpen={setActiveId} onChanged={fetchLeads} />
       </div>
 
-      {/* Găsire: motorul (nișe × orașe) și importul din Google Sheet */}
-      <EnginePanel onChanged={fetchLeads} />
-      <ImportForm
-        onImported={() => {
-          setPage(0);
-          fetchLeads();
-        }}
-      />
+      {/* Setări, grupate: de unde vin leadurile și cum sunt contactate */}
+      <SectionGroup title="Găsire lead-uri">
+        <EnginePanel onChanged={fetchLeads} />
+      </SectionGroup>
 
-      {/* Outreach: modelele pașilor și campaniile pe filtre */}
-      <OutreachPanel />
-      <CampaignPanel onChanged={fetchLeads} />
+      <SectionGroup title="Outreach">
+        <OutreachPanel />
+        <CampaignPanel onChanged={fetchLeads} />
+      </SectionGroup>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
-        <KpiCard label="Total" value={kpi.total} />
-        <KpiCard label="ICP match" value={kpi.icpMatch} />
-        <KpiCard label="Segment A" value={kpi.segmentA} />
-        <KpiCard label="În coadă email" value={kpi.queuedEmail} />
+        <KpiCard label="Total" value={kpi.total} onClick={() => reset(['sort'])} />
+        <KpiCard label="ICP match" value={kpi.icpMatch} onClick={() => setFilter('icp')('1')} />
+        <KpiCard label="Segment A" value={kpi.segmentA} onClick={() => setFilter('segment')('A')} />
+        <KpiCard label="În coadă email" value={kpi.queuedEmail} onClick={() => setFilter('stage')('QUEUED_EMAIL')} />
         <KpiCard label="Răspunsuri" value={kpi.replied} accent />
-        <KpiCard label="Call programat" value={kpi.callBooked} accent />
-        <KpiCard label="Câștigate" value={kpi.won} accent />
+        <KpiCard label="Call programat" value={kpi.callBooked} accent onClick={() => setFilter('stage')('CALL_BOOKED')} />
+        <KpiCard label="Câștigate" value={kpi.won} accent onClick={() => setFilter('stage')('WON')} />
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-600" size={15} />
-        <input
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setShowPitched(false);
-          }}
-          placeholder="Caută după firmă, domeniu, oraș, nișă, telefon sau email..."
-          className="w-full bg-stone-900/60 border border-stone-800/60 rounded-xl pl-10 pr-9 py-2.5 text-sm text-stone-200 placeholder-stone-600 focus:outline-none focus:border-amber-500/40"
-        />
-        {search && (
-          <button
-            onClick={() => setSearch('')}
-            title="Golește căutarea"
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-600 hover:text-stone-300"
-          >
-            <X size={15} />
-          </button>
-        )}
-      </div>
-
-      <div className="space-y-2">
-        {facets.sources.length > 1 && (
-          <OptionRow
-            label="Sursă"
-            options={[{ value: 'all', label: 'Toate' }, ...facets.sources.map((s) => ({ value: s, label: SOURCE_LABELS[s] ?? s }))]}
-            selected={source}
-            onSelect={applyFilter(setSource)}
+      {/* Bara de filtre: un control per filtru, rămâne vizibilă la scroll */}
+      <section className="filter-bar sticky top-0 z-20 p-3 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            aria-label="Vizualizare"
+            value={showPitched ? 'pitched' : 'leads'}
+            onChange={(v) => set('view', v)}
+            options={[
+              { value: 'leads', label: 'Lead-uri' },
+              { value: 'pitched', label: 'Jurnal trimiteri' },
+            ]}
           />
-        )}
-        {stageOptions.length > 1 && (
-          <OptionRow label="Etapă" options={stageOptions} selected={stage} onSelect={applyFilter(setStage)} />
-        )}
-        {facets.segments.length > 0 && (
-          <OptionRow
-            label="Segment"
-            options={[{ value: 'all', label: 'Toate' }, ...facets.segments.map((s) => ({ value: s, label: s }))]}
-            selected={segment}
-            onSelect={applyFilter(setSegment)}
-          />
-        )}
-        <OptionRow label="ICP" options={ICP_OPTIONS} selected={icp} onSelect={applyFilter(setIcp)} />
-        <OptionRow label="Scor" options={SCORE_OPTIONS} selected={score} onSelect={applyFilter(setScore)} />
-        <OptionRow label="Rating" options={RATING_OPTIONS} selected={rating} onSelect={applyFilter(setRating)} />
-        {facets.cities.length > 0 && (
-          <FilterRow label="Oraș" values={facets.cities} selected={city} onSelect={applyFilter(setCity)} />
-        )}
-        {facets.niches.length > 0 && (
-          <FilterRow label="Nișă" values={facets.niches} selected={niche} onSelect={applyFilter(setNiche)} />
-        )}
-        {facets.categories.length > 0 && (
-          <FilterRow label="Categorie" values={facets.categories} selected={category} onSelect={applyFilter(setCategory)} />
-        )}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <OptionRow label="Sortare" options={SORT_OPTIONS} selected={sort} onSelect={setSort} />
-            <button
-              onClick={() => setShowPitched((prev) => !prev)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                showPitched
-                  ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                  : 'bg-stone-900/60 text-stone-500 border border-stone-800/60 hover:border-stone-700 hover:text-stone-400'
-              }`}
-            >
-              <Send size={12} />
-              Pitched
-            </button>
-          </div>
-          {!showPitched && !loading && (
-            <span className="text-xs text-stone-600 shrink-0">
-              {total} {total === 1 ? 'lead' : 'lead-uri'}
-              {hasFilters ? ' potrivite' : ''}
-            </span>
+          {!showPitched && (
+            <SearchField
+              value={f.q}
+              onChange={setFilter('q')}
+              placeholder="Caută după firmă, domeniu, oraș, nișă, telefon sau email..."
+              className="flex-1 min-w-[220px]"
+            />
           )}
         </div>
-      </div>
+
+        {!showPitched && (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              {stageOptions.length > 0 && <FilterSelect label="Etapă" value={f.stage} options={stageOptions} onChange={setFilter('stage')} />}
+              {sourceOptions.length > 1 && <FilterSelect label="Sursă" value={f.source} options={sourceOptions} onChange={setFilter('source')} />}
+              {facets.niches.length > 0 && <FilterSelect label="Nișă" value={f.niche} options={asOptions(facets.niches)} onChange={setFilter('niche')} />}
+              {facets.cities.length > 0 && <FilterSelect label="Oraș" value={f.city} options={asOptions(facets.cities)} onChange={setFilter('city')} />}
+              {facets.categories.length > 0 && <FilterSelect label="Categorie" value={f.category} options={asOptions(facets.categories)} onChange={setFilter('category')} />}
+              {facets.segments.length > 0 && <FilterSelect label="Segment" value={f.segment} options={asOptions(facets.segments)} onChange={setFilter('segment')} />}
+              <FilterSelect label="ICP" value={f.icp} options={ICP_OPTIONS} onChange={setFilter('icp')} />
+              <FilterSelect label="Scor" value={f.score} options={SCORE_OPTIONS} onChange={setFilter('score')} />
+              <FilterSelect label="Rating" value={f.rating} options={RATING_OPTIONS} onChange={setFilter('rating')} />
+              <span className="hidden sm:block w-px h-5 bg-[var(--card-border)] mx-1" />
+              <FilterSelect label="Sortare" value={f.sort} options={SORT_OPTIONS} onChange={setFilter('sort')} hideAll />
+              {!loading && (
+                <span className="ml-auto text-xs text-stone-500 tabular-nums shrink-0">
+                  {total} {total === 1 ? 'lead' : 'lead-uri'}
+                  {hasFilters ? ' potrivite' : ''}
+                </span>
+              )}
+            </div>
+            <ActiveFilterChips chips={chips} onReset={() => reset(['view', 'sort'])} />
+          </>
+        )}
+      </section>
 
       {showPitched ? (
         <SentMessagesTable
@@ -361,71 +373,33 @@ function PipelineContent() {
   );
 }
 
-function KpiCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+/** Un grup de panouri de setări, cu eticheta lui (aceeași tipografie ca sidebar-ul). */
+function SectionGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-stone-800/60 bg-stone-900/60 px-4 py-3">
+    <section className="space-y-2">
+      <h2 className="px-1 text-[10.5px] uppercase tracking-[0.12em] font-medium" style={{ color: 'rgb(var(--line-rgb) / 0.45)' }}>
+        {title}
+      </h2>
+      <div className="space-y-2">{children}</div>
+    </section>
+  );
+}
+
+function KpiCard({ label, value, accent, onClick }: { label: string; value: number; accent?: boolean; onClick?: () => void }) {
+  const body = (
+    <>
       <p className="text-[10px] text-stone-500 uppercase tracking-[0.15em] font-medium truncate">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${accent ? 'text-amber-400' : 'text-stone-100'}`}>
-        {value}
+      <p className={`mt-1 text-2xl font-semibold ${accent ? 'text-amber-400' : 'text-stone-100'}`}>
+        <CountUp value={value} />
       </p>
-    </div>
+    </>
   );
-}
-
-/** Un rând de chips etichetat, peste `CategoryFilter` (valorile sunt și etichete). */
-function FilterRow({
-  label,
-  values,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  values: string[];
-  selected: string;
-  onSelect: (value: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] text-stone-100 uppercase tracking-[0.15em] font-medium w-16 shrink-0">
-        {label}
-      </span>
-      <CategoryFilter categories={values} selected={selected} onSelect={onSelect} />
-    </div>
-  );
-}
-
-/** Rând de chips cu etichete diferite de valori (praguri, surse, etape). */
-function OptionRow({
-  label,
-  options,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  options: Option[];
-  selected: string;
-  onSelect: (value: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] text-stone-100 uppercase tracking-[0.15em] font-medium w-16 shrink-0">
-        {label}
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((option) => (
-          <button
-            key={option.value}
-            onClick={() => onSelect(option.value)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-              selected === option.value
-                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                : 'bg-stone-900/60 text-stone-500 border border-stone-800/60 hover:border-stone-700 hover:text-stone-400'
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
+  const cls = `glass-card ${accent ? 'glass-card--tint' : ''} px-4 py-3 text-left w-full`;
+  return onClick ? (
+    <button type="button" onClick={onClick} className={cls} title={`Filtrează: ${label}`}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls}>{body}</div>
   );
 }

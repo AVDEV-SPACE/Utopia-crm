@@ -2,6 +2,7 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLiveRefresh } from '@/hooks/use-live-refresh';
+import { ChatSkeleton, MessagesSkeleton } from '@/components/ui/skeleton';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,12 +154,7 @@ export default function MessagingPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex items-center gap-3 text-stone-500">
-          <div className="w-5 h-5 border-2 border-stone-700 border-t-amber-500 rounded-full animate-spin" />
-          <span>Se încarcă conversațiile...</span>
-        </div>
-      </div>
+      <ChatSkeleton />
     );
   }
 
@@ -264,9 +260,7 @@ export default function MessagingPage() {
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {loadingMessages ? (
-                <div className="flex justify-center py-8">
-                  <div className="w-6 h-6 border-2 border-stone-700 border-t-amber-500 rounded-full animate-spin" />
-                </div>
+                <MessagesSkeleton />
               ) : messages.length === 0 ? (
                 <div className="text-center text-gray-500 py-8">
                   Nu există mesaje în această conversație

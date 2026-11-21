@@ -13,6 +13,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import styles from './overview.module.css';
+import { CardSkeleton } from '@/components/ui/skeleton';
+import { fetchJson, peek } from '@/lib/data-cache';
+import { PAGE_DATA } from '@/lib/navConfig';
 
 interface Booking {
   id:           string;
@@ -67,6 +70,24 @@ interface OutreachMonth {
 const EMPTY_OUTREACH: OutreachMonth = {
   dailyTarget: 0, daysInMonth: 0, dayOfMonth: 0, today: 0, month: 0, days: [], emailOpens: 0, channels: [],
 };
+
+/** Răspunsul brut din /api/overview (câmpurile pot lipsi pe o bază de date nouă). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type OverviewJson = Record<string, any>;
+
+function toOverviewData(json: OverviewJson): OverviewData {
+  return {
+    bookings:       json.bookings ?? [],
+    bookingsTotal:  json.metrics?.bookingsTotal     ?? 0,
+    bookingsMonth:  json.metrics?.bookingsThisMonth ?? 0,
+    pitched:        json.pitched ?? { total: 0, thisMonth: 0, lastMonth: 0, messages: 0, leadsTotal: 0 },
+    pitchedTrend:   json.pitchedTrend ?? [],
+    outreach:       json.outreach ?? EMPTY_OUTREACH,
+    activity:       json.activity       ?? [],
+    activityBucket: json.activityBucket ?? 'day',
+    today:          json.today          ?? [],
+  };
+}
 
 const CHANNEL_NAMES: Record<string, string> = {
   email: 'Email', sms: 'SMS', whatsapp: 'WhatsApp', instagram: 'Instagram', facebook: 'Facebook', linkedin: 'LinkedIn',
@@ -326,7 +347,7 @@ function PitchedCard({ pitched, outreach, delta, pitchRate }: {
   const replied = o.channels.reduce((s, c) => s + c.replied, 0);
 
   return (
-    <div className="rounded-2xl bg-[var(--ov-hero)] text-[var(--ov-hero-ink)] p-5 pb-4 md:col-span-2 lg:col-span-1 flex flex-col">
+    <div className="rounded-2xl bg-[var(--ov-hero)] text-[var(--ov-hero-ink)] p-5 pb-4 md:col-span-2 lg:col-span-1 flex flex-col h-full min-h-0 overflow-hidden">
       <div className="flex items-start justify-between gap-3">
         <p className="text-[13px] font-medium text-[var(--ov-hero-muted)]">Pitched · outreach</p>
         <div className={cx(styles.mono, 'flex rounded-full border border-white/15 p-0.5 text-[11px]')} role="tablist" aria-label="Vizualizare outreach">
@@ -363,8 +384,8 @@ function PitchedCard({ pitched, outreach, delta, pitchRate }: {
           )}
 
           {/* O bară pe zi; linia punctată = ținta zilnică, zilele viitoare estompate */}
-          <div className="relative mt-auto pt-4">
-            <div className="relative flex items-end gap-[2px] h-14">
+          <div className="relative mt-auto pt-3">
+            <div className="relative flex items-end gap-[2px] h-10">
               <span
                 className="pointer-events-none absolute inset-x-0 border-t border-dashed border-white/30"
                 style={{ bottom: `${(o.dailyTarget / maxDay) * 100}%` }}
@@ -399,7 +420,7 @@ function PitchedCard({ pitched, outreach, delta, pitchRate }: {
             {fmtCount(replied)} din {fmtCount(contacted)} lead-uri contactate luna asta
             {o.emailOpens > 0 && ` · ${fmtCount(o.emailOpens)} emailuri deschise`}
           </p>
-          <div className="mt-3 space-y-2.5">
+          <div className="mt-3 space-y-2.5 flex-1 min-h-0 overflow-y-auto pr-1 modal-scroll">
             {o.channels.length === 0 ? (
               <p className="text-[12px] text-[var(--ov-hero-muted)]">Nicio trimitere luna asta.</p>
             ) : (
@@ -445,9 +466,14 @@ type FilterKey = (typeof FILTERS)[number]['key'];
 
 export default function OverviewPage() {
   const { user } = useUser();
-  const [data,    setData]    = useState<OverviewData | null>(null);
-  const [ga,      setGA]      = useState<GAData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Datele din cache (vizită anterioară sau preload la hover pe sidebar) se afișează
+  // instant; fetch-ul de la montare le reîmprospătează. Skeleton doar la prima vizită.
+  const [data,    setData]    = useState<OverviewData | null>(() => {
+    const cached = peek<OverviewJson>(PAGE_DATA.overview);
+    return cached ? toOverviewData(cached) : null;
+  });
+  const [ga,      setGA]      = useState<GAData | null>(() => peek<GAData>(PAGE_DATA.overviewGA) ?? null);
+  const [loading, setLoading] = useState(() => !peek(PAGE_DATA.overview));
   const [now,     setNow]     = useState<Date | null>(null);
   const [filter,  setFilter]  = useState<FilterKey>('all');
   const [gaPeriod,  setGAPeriod]  = useState<GAPeriod>('30d');
@@ -467,20 +493,9 @@ export default function OverviewPage() {
     const controller = new AbortController();
     inFlight.current = controller;
     try {
-      const res = await fetch(`/api/overview?activity=${activityPeriodRef.current}`, { signal: controller.signal });
-      if (!res.ok) return;
-      const json = await res.json();
-      setData({
-        bookings:      json.bookings ?? [],
-        bookingsTotal: json.metrics?.bookingsTotal     ?? 0,
-        bookingsMonth: json.metrics?.bookingsThisMonth ?? 0,
-        pitched:       json.pitched ?? { total: 0, thisMonth: 0, lastMonth: 0, messages: 0, leadsTotal: 0 },
-        pitchedTrend:  json.pitchedTrend ?? [],
-        outreach:      json.outreach ?? EMPTY_OUTREACH,
-        activity:       json.activity       ?? [],
-        activityBucket: json.activityBucket ?? 'day',
-        today:          json.today          ?? [],
-      });
+      // fetchJson salvează și în cache: la revenirea pe Overview datele apar instant
+      const json = await fetchJson<OverviewJson>(`/api/overview?activity=${activityPeriodRef.current}`, { signal: controller.signal });
+      setData(toOverviewData(json));
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
       console.error('Overview fetch error:', err);
@@ -525,8 +540,7 @@ export default function OverviewPage() {
   useEffect(() => {
     const controller = new AbortController();
     setGALoading(true);
-    fetch(`/api/analytics/pageviews?period=${gaPeriod}`, { signal: controller.signal })
-      .then(res => (res.ok ? res.json() : null))
+    fetchJson<GAData>(`/api/analytics/pageviews?period=${gaPeriod}`, { signal: controller.signal })
       .then(json => json && setGA(json))
       .catch(() => {})
       .finally(() => { if (!controller.signal.aborted) setGALoading(false); });
@@ -600,14 +614,22 @@ export default function OverviewPage() {
         </div>
 
         {loading || !data || !pt ? (
-          <div className="flex items-center gap-3 text-[var(--ov-muted)] py-16">
-            <div className="w-5 h-5 border-2 border-[var(--ov-border)] border-t-[var(--ov-accent)] rounded-full animate-spin" />
-            <span>Se încarcă datele...</span>
+          // Aceeași grilă ca dashboard-ul final (rând KPI de 312px + rândul de jos): zero layout shift
+          <div className="space-y-5" role="status" aria-busy="true" aria-label="Se încarcă datele">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[312px]">
+              <CardSkeleton className="md:col-span-2 lg:col-span-1" />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <CardSkeleton className="lg:col-span-2" height={300} />
+              <CardSkeleton height={300} />
+            </div>
           </div>
         ) : (
           <>
             {/* ── KPI ─────────────────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-[312px]">
               {/* Pitched — ținta de outreach a lunii și răspunsurile pe canal */}
               {/* Div, nu link: comutatorul de vizualizare nu poate sta într-un <a>; lista are link propriu jos */}
               <PitchedCard pitched={pt} outreach={data.outreach} delta={delta} pitchRate={pitchRate} />

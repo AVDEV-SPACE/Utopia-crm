@@ -7,6 +7,8 @@ import { Facebook, Hand, Instagram, Loader2, MessageSquare, RefreshCw, Reply, Se
 import { Button } from '@/components/ui/button';
 import type { Conversation, ConversationMessage } from '@/services/followups/types';
 import type { SocialConversationSummary } from '@/services/followups/conversations';
+import { useLiveRefresh } from '@/hooks/use-live-refresh';
+import { ListSkeleton, MessagesSkeleton } from '@/components/ui/skeleton';
 
 type ChannelFilter = 'all' | 'facebook' | 'instagram';
 
@@ -17,7 +19,7 @@ interface Thread {
 }
 
 /** Cât de des se reîncarcă inbox-ul cât timp tab-ul e vizibil. */
-const REFRESH_MS = 30_000;
+const REFRESH_MS = 10_000;
 
 const CHANNEL_ICON = { facebook: Facebook, instagram: Instagram } as const;
 
@@ -87,14 +89,13 @@ export function SocialInbox() {
   }, [activeId, loadThread]);
 
   // Reîncărcare periodică (mesaje noi, răspunsurile AI) cât timp pagina e vizibilă
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
-      loadList();
-      if (activeId) loadThread(activeId, true);
-    }, REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [activeId, loadList, loadThread]);
+  useLiveRefresh(
+    useCallback(
+      () => Promise.all([loadList(), activeId ? loadThread(activeId, true) : null]),
+      [activeId, loadList, loadThread]
+    ),
+    REFRESH_MS
+  );
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });
@@ -169,9 +170,7 @@ export function SocialInbox() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-10 text-sm text-stone-500">
-            <Loader2 size={14} className="mr-2 animate-spin" /> Se încarcă...
-          </div>
+          <ListSkeleton rows={6} className="p-2" />
         ) : listError ? (
           <p className="p-4 text-sm text-red-400">{listError}</p>
         ) : conversations.length === 0 ? (
@@ -214,8 +213,8 @@ export function SocialInbox() {
         {!activeId ? (
           <div className="flex flex-1 items-center justify-center p-6 text-sm text-stone-500">Alege o conversație din listă.</div>
         ) : threadLoading || !thread ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-stone-500">
-            <Loader2 size={14} className="mr-2 animate-spin" /> Se încarcă...
+          <div className="flex-1 p-4">
+            <MessagesSkeleton />
           </div>
         ) : (
           <>

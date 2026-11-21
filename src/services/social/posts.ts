@@ -1,5 +1,6 @@
 import { sql } from '@/lib/neon';
 import type { SocialChannel } from './config';
+import type { PostFormat, PostMediaItem } from './post-rules';
 
 /** Postările programate pe Facebook / Instagram (tabela social_posts). */
 
@@ -11,6 +12,10 @@ export interface SocialPost {
   platform: SocialChannel;
   status: SocialPostStatus;
   caption: string;
+  format: PostFormat;
+  /** Elementele din biblioteca media, în ordinea de afișare */
+  media_ids: string[];
+  /** Postările vechi: imaginea dată direct prin URL */
   media_url: string | null;
   scheduled_at: string | null;
   published_at: string | null;
@@ -24,13 +29,31 @@ export interface SocialPost {
 /** După cât timp o postare rămasă „publishing” (rulare căzută) e considerată eșuată. */
 const STALE_PUBLISHING_MINUTES = 15;
 
-export async function listSocialPosts(orgId: string, limit = 100): Promise<SocialPost[]> {
+/** Postarea cu elementele media rezolvate (pentru listă și publicare). */
+export interface SocialPostWithMedia extends SocialPost {
+  media: PostMediaItem[];
+}
+
+export async function listSocialPosts(orgId: string, limit = 100): Promise<SocialPostWithMedia[]> {
   const rows = await sql`
-    SELECT * FROM social_posts WHERE org_id = ${orgId}
-    ORDER BY coalesce(scheduled_at, created_at) DESC
+    SELECT p.*, coalesce((
+      SELECT json_agg(
+        json_build_object('id', m.id, 'url', m.url, 'kind', m.kind, 'width', m.width, 'height', m.height, 'duration_s', m.duration_s)
+        ORDER BY array_position(p.media_ids, m.id)
+      )
+      FROM social_media m WHERE m.id = ANY(p.media_ids)
+    ), '[]'::json) AS media
+    FROM social_posts p WHERE p.org_id = ${orgId}
+    ORDER BY coalesce(p.scheduled_at, p.created_at) DESC
     LIMIT ${limit}
   `;
-  return rows as unknown as SocialPost[];
+  return (rows as unknown as SocialPostWithMedia[]).map(withLegacyMedia);
+}
+
+/** Postările vechi au imaginea în media_url, nu în biblioteca media. */
+function withLegacyMedia(post: SocialPostWithMedia): SocialPostWithMedia {
+  if (post.media.length > 0 || !post.media_url) return post;
+  return { ...post, media: [{ id: null, url: post.media_url, kind: 'image', width: null, height: null, duration_s: null }] };
 }
 
 export async function createSocialPost(input: {
@@ -38,14 +61,15 @@ export async function createSocialPost(input: {
   platform: SocialChannel;
   status: 'draft' | 'scheduled';
   caption: string;
-  mediaUrl: string | null;
+  format: PostFormat;
+  mediaIds: string[];
   scheduledAt: Date | null;
   createdBy: string | null;
 }): Promise<SocialPost> {
   const rows = await sql`
-    INSERT INTO social_posts (org_id, platform, status, caption, media_url, scheduled_at, created_by)
+    INSERT INTO social_posts (org_id, platform, status, caption, format, media_ids, scheduled_at, created_by)
     VALUES (
-      ${input.orgId}, ${input.platform}, ${input.status}, ${input.caption}, ${input.mediaUrl},
+      ${input.orgId}, ${input.platform}, ${input.status}, ${input.caption}, ${input.format}, ${input.mediaIds}::uuid[],
       ${input.scheduledAt ? input.scheduledAt.toISOString() : null}::timestamptz, ${input.createdBy}
     )
     RETURNING *

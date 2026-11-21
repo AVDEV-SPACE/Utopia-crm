@@ -143,7 +143,7 @@ export function OutreachPanel() {
   const status = state?.status;
 
   return (
-    <section className="rounded-xl border border-stone-800/60 bg-stone-900/60">
+    <section className="glass-card">
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
         <Mail size={16} className="text-amber-400" />
         <h2 className="text-sm font-semibold text-stone-100">Outreach email</h2>

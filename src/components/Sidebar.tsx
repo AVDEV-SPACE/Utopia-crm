@@ -1,46 +1,143 @@
 // src/components/Sidebar.tsx
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { UserButton, useUser } from '@clerk/nextjs';
-import {
-  LayoutDashboard,
-  Calendar,
-  ChevronLeft,
-  Menu,
-  Mail,
-  BookOpen,
-  Target,
-  Bot,
-  Workflow,
-  Share2,
-} from 'lucide-react';
+import { ChevronLeft, ChevronDown, Menu } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { NAV_CONFIG, categoryOf, isNavActive, type NavBadges } from '@/lib/navConfig';
+import { isPillAnimating, slidePill } from '@/lib/motion';
+import { preload } from '@/lib/data-cache';
+import { useBeginExit } from '@/components/motion/PageTransition';
+import { useLiveRefresh } from '@/hooks/use-live-refresh';
 
-const menuItems = [
-  { name: 'Overview',    href: '/overview',                icon: LayoutDashboard },
-  { name: 'Bookings',   href: '/bookings',                icon: Calendar },
-  { name: 'Chats',  href: '/messaging',               icon: Mail },
-  { name: 'Emails',  href: '/educational-templates',   icon: BookOpen },
-  { name: 'Lead Generation', href: '/lead-generation',     icon: Target },
-  { name: 'Pipeline',    href: '/pipeline',                icon: Workflow },
-  { name: 'Socials',     href: '/socials',                 icon: Share2 },
-  { name: 'AI Follow-Up', href: '/dashboard/follow-ups-ai', icon: Bot },
-];
+const GROUPS_STORAGE_KEY = 'utopia-nav-groups';
+const BADGES_REFRESH_MS = 60_000;
+const PILL_RADIUS = 14;
+
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+function readClosedGroups(): string[] {
+  try {
+    const raw = window.localStorage.getItem(GROUPS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeClosedGroups(ids: string[]) {
+  try {
+    window.localStorage.setItem(GROUPS_STORAGE_KEY, JSON.stringify(ids));
+  } catch {
+    // Storage blocat (mod privat) — grupurile rămân deschise la următoarea vizită
+  }
+}
+
+function formatBadge(n: number): string {
+  return n > 99 ? '99+' : String(n);
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const beginExit = useBeginExit();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [closedGroups, setClosedGroups] = useState<string[]>([]);
+  const [badges, setBadges] = useState<NavBadges>({});
+  // Click-ul mută pill-ul imediat, fără să aștepte încărcarea noii rute
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
   const { user, isLoaded } = useUser();
-  // Culorile vin din scara de culori a temei (globals.css), nu din JS —
-  // aceleași clase dau nuanțele corecte și pe light, și pe dark.
-  const bgClass = 'bg-stone-900';
-  const textClass = 'text-stone-100';
-  const borderClass = 'border-stone-800/60';
-  const mutedClass = 'text-stone-500';
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLSpanElement>(null);
+  const pillInnerRef = useRef<HTMLSpanElement>(null);
+  const itemRefs = useRef(new Map<string, HTMLAnchorElement>());
+
+  const activeHref =
+    pendingHref ?? NAV_CONFIG.flatMap((c) => c.items).find((i) => isNavActive(pathname, i.href))?.href ?? null;
+  const activeCategory = pendingHref ? categoryOf(pendingHref) : categoryOf(pathname);
+
+  useEffect(() => setPendingHref(null), [pathname]);
+  useEffect(() => setClosedGroups(readClosedGroups()), []);
+
+  const fetchBadges = useCallback(async () => {
+    try {
+      const res = await fetch('/api/nav/badges', { cache: 'no-store' });
+      if (res.ok) setBadges(await res.json());
+    } catch {
+      // Badge-urile sunt informative; o eroare de rețea nu afectează meniul
+    }
+  }, []);
+  useEffect(() => {
+    fetchBadges();
+  }, [fetchBadges, pathname]);
+  useLiveRefresh(fetchBadges, BADGES_REFRESH_MS);
+
+  // ── Pill-ul activ ───────────────────────────────────────────────────────
+  const movePill = useCallback(
+    (instant: boolean) => {
+      const pill = pillRef.current;
+      const inner = pillInnerRef.current;
+      if (!pill || !inner) return;
+      const target = activeHref ? itemRefs.current.get(activeHref) : undefined;
+      if (!target) {
+        pill.style.opacity = '0';
+        inner.style.opacity = '0';
+        return;
+      }
+      pill.style.opacity = '';
+      inner.style.opacity = '';
+      slidePill(pill, target, { axis: 'y', radius: PILL_RADIUS, layers: [{ el: inner, inset: 1 }], instant });
+    },
+    [activeHref]
+  );
+
+  useIsoLayoutEffect(() => movePill(false), [movePill]);
+
+  const movePillRef = useRef(movePill);
+  useEffect(() => {
+    movePillRef.current = movePill;
+  }, [movePill]);
+
+  // Resize, restrângerea meniului și a grupurilor schimbă pozițiile → repoziționare directă.
+  // Observer-ul se creează o singură dată: recrearea lui la fiecare rută declanșa
+  // callback-ul inițial, care oprea animația pill-ului imediat după pornire.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const snap = () => {
+      const pill = pillRef.current;
+      // În timpul animației nu întrerupem; slidePill se re-aliniază singur la final
+      if (pill && isPillAnimating(pill)) return;
+      movePillRef.current(true);
+    };
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(snap) : null;
+    ro?.observe(list);
+    // Fonturile web schimbă înălțimea rândurilor după prima măsurare
+    document.fonts?.ready.then(snap).catch(() => {});
+    return () => ro?.disconnect();
+  }, []);
+
+  function toggleGroup(id: string) {
+    setClosedGroups((prev) => {
+      const next = prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id];
+      writeClosedGroups(next);
+      return next;
+    });
+  }
+
+  function handleNavigate(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    // Ctrl/Cmd/Shift/click mijloc deschid tab nou: fără animații locale
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    setIsMobileOpen(false);
+    if (isNavActive(pathname, href)) return;
+    setPendingHref(href);
+    beginExit(href);
+  }
 
   return (
     <>
@@ -53,15 +150,16 @@ export default function Sidebar() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed lg:relative inset-y-0 left-0 z-50 flex flex-col ${bgClass} border-r ${borderClass} transition-all duration-300 ${
+      {/* Glass, plutitor: 0.35rem de margini, rotunjit sus și jos (`.sidebar-glass`) */}
+      <aside className={`sidebar-glass fixed lg:relative inset-y-0 left-0 z-50 flex flex-col shrink-0 transition-all duration-300 ${
         isCollapsed ? 'w-[72px]' : 'w-60'
-      } ${isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+      } ${isMobileOpen ? 'translate-x-0' : '-translate-x-[calc(100%+1rem)] lg:translate-x-0'}`}>
         {/* Logo */}
         {/* Pe 72px (collapsed) logo-ul + butonul nu încap pe același rând: containerul
             se strânge, iar `max-width:100%` din preflight ar turti imaginea. De aceea
             butonul de extindere trece pe rândul de dedesubt când e collapsed. */}
-        <div className={`flex items-center h-16 ${isCollapsed ? 'justify-center px-2' : 'justify-between px-4'} ${borderClass}`}>
-          <Link href="/overview" className="flex items-center gap-3 min-w-0 shrink-0">
+        <div className={`flex items-center h-16 ${isCollapsed ? 'justify-center px-2' : 'justify-between px-4'}`}>
+          <Link href="/overview" onClick={(e) => handleNavigate(e, '/overview')} className="flex items-center gap-3 min-w-0 shrink-0">
             {/* Logo-ul are deja fundal și colțuri rotunjite în imagine */}
             <Image
               src="/utopia-icon.svg"
@@ -73,8 +171,8 @@ export default function Sidebar() {
             />
             {!isCollapsed && (
               <div className="min-w-0">
-                <p className={`text-sm font-semibold ${textClass} tracking-wide truncate`}>CRM Tools</p>
-                <p className={`text-[10px] ${mutedClass} uppercase tracking-[0.15em]`}>Utopia CRM</p>
+                <p className="text-sm font-semibold text-stone-100 tracking-wide truncate">CRM Tools</p>
+                <p className="text-[10px] text-stone-500 uppercase tracking-[0.15em]">Utopia CRM</p>
               </div>
             )}
           </Link>
@@ -102,38 +200,94 @@ export default function Sidebar() {
           </button>
         )}
 
-        {/* Nav */}
+        {/* Nav — un singur pill pentru toată lista, care traversează și categoriile */}
         <nav className="flex-1 p-3 overflow-y-auto">
-          {!isCollapsed && (
-            <p className="text-[10px] text-stone-700 uppercase tracking-[0.18em] font-medium px-3 mb-3">Navigare</p>
-          )}
-          <ul className="space-y-1">
-            {menuItems.map(item => {
-              const Icon = item.icon;
-              const isActive = pathname === item.href;
+          <div ref={listRef} className={`relative ${isCollapsed ? 'space-y-2' : 'space-y-4'}`}>
+            <span ref={pillRef} className="nav-pill" aria-hidden />
+            <span ref={pillInnerRef} className="nav-pill-inner" aria-hidden />
+
+            {NAV_CONFIG.map((category, index) => {
+              // Grupul rutei active e mereu deschis; în modul icon-only nu se restrânge nimic
+              const open = isCollapsed || category.id === activeCategory || !closedGroups.includes(category.id);
               return (
-                <li key={item.name}>
-                  <button
-                    onClick={() => { window.location.href = item.href; setIsMobileOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
-                      isActive
-                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        : 'text-stone-400 hover:bg-stone-800/80 hover:text-stone-200 border border-transparent'
-                    } ${isCollapsed ? 'justify-center' : ''}`}
-                    title={isCollapsed ? item.name : undefined}
-                  >
-                    <Icon className={`h-4 w-4 flex-shrink-0 transition-colors ${isActive ? 'text-amber-400' : 'text-stone-500 group-hover:text-stone-300'}`} />
-                    {!isCollapsed && <span>{item.name}</span>}
-                    {isActive && !isCollapsed && <span className="ml-auto w-1 h-1 rounded-full bg-amber-400" />}
-                  </button>
-                </li>
+                <div key={category.id}>
+                  {isCollapsed ? (
+                    index > 0 && (
+                      <div title={category.label} className="relative z-[1] py-1.5" role="separator" aria-label={category.label}>
+                        <div className="h-px mx-3" />
+                      </div>
+                    )
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(category.id)}
+                      aria-expanded={open}
+                      className="relative z-[1] w-full flex items-center justify-between px-3 mb-1.5 text-[10.5px] uppercase tracking-[0.12em] font-medium group"
+                      style={{ color: 'rgb(var(--line-rgb) / 0.45)' }}
+                    >
+                      <span>{category.label}</span>
+                      <ChevronDown
+                        className={`h-3 w-3 opacity-0 group-hover:opacity-100 transition-[transform,opacity] duration-200 ${open ? '' : '-rotate-90 opacity-100'}`}
+                      />
+                    </button>
+                  )}
+
+                  <div className="nav-group-body" data-open={open}>
+                    <ul className="space-y-1">
+                      {category.items.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = item.href === activeHref;
+                        const badge = item.badgeKey ? badges[item.badgeKey] : undefined;
+                        return (
+                          <li key={item.href}>
+                            <Link
+                              href={item.href}
+                              ref={(el) => {
+                                if (el) itemRefs.current.set(item.href, el);
+                                else itemRefs.current.delete(item.href);
+                              }}
+                              onClick={(e) => handleNavigate(e, item.href)}
+                              // Datele paginii pornesc la hover/focus: la click sunt de obicei deja în cache
+                              onMouseEnter={() => item.prefetch?.forEach((url) => preload(url))}
+                              onFocus={() => item.prefetch?.forEach((url) => preload(url))}
+                              aria-current={isActive ? 'page' : undefined}
+                              tabIndex={open ? undefined : -1}
+                              title={isCollapsed ? item.name : undefined}
+                              className={`nav-item relative z-[1] w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium group ${
+                                isActive ? 'text-amber-400' : 'text-stone-400 hover:text-stone-200'
+                              } ${isCollapsed ? 'justify-center' : ''}`}
+                            >
+                              <span className="relative flex-shrink-0">
+                                <Icon className={`h-4 w-4 transition-colors duration-150 ${isActive ? 'text-amber-400' : 'text-stone-500 group-hover:text-stone-300'}`} />
+                                {isCollapsed && !!badge && (
+                                  <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                )}
+                              </span>
+                              {!isCollapsed && <span className="truncate">{item.name}</span>}
+                              {!isCollapsed && !!badge && (
+                                <span
+                                  className={`ml-auto text-[10px] leading-none tabular-nums px-1.5 py-1 rounded-md ${
+                                    isActive ? 'bg-amber-500/20 text-amber-400' : 'bg-stone-800 text-stone-400'
+                                  }`}
+                                  title={`${badge}`}
+                                >
+                                  {formatBadge(badge)}
+                                </span>
+                              )}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
               );
             })}
-          </ul>
+          </div>
         </nav>
 
         {/* User */}
-        <div className="p-3 border-t mb-2 border-stone-800/60">
+        <div className="p-3 border-t border-stone-800/60">
           <div className={`flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-stone-800/50 transition-colors ${isCollapsed ? 'justify-center' : ''}`}>
             {isLoaded && user ? (
               <>

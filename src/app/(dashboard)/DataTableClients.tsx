@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useLiveRefresh } from '@/hooks/use-live-refresh';
+import { TableSkeleton } from '@/components/ui/skeleton';
 
 interface RawRecord {
   id: string;
@@ -21,6 +23,7 @@ interface ClientDisplay {
 }
 
 const ITEMS_PER_PAGE = 8;
+const REFRESH_MS = 15_000;
 
 export function DataTableClients({ data: initialData = [] }: { data?: RawRecord[] }) {
   const [data, setData] = useState<RawRecord[]>(initialData);
@@ -29,31 +32,38 @@ export function DataTableClients({ data: initialData = [] }: { data?: RawRecord[
   const [filterService, setFilterService] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
 
+  // `quiet`: reîncărcare în fundal — fără spinner și fără să golească tabelul la o eroare
+  const fetchData = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true);
+    try {
+      const response = await fetch('/api/bookings', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Failed to fetch');
+      const fetchedData = await response.json();
+      setData(fetchedData || []);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+      if (!quiet) setData([]);
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (initialData.length > 0) {
       setData(initialData);
       setLoading(false);
       return;
     }
-
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch('/api/bookings');
-        if (!response.ok) throw new Error('Failed to fetch');
-        const fetchedData = await response.json();
-        console.log('Clients fetched:', fetchedData?.length);
-        setData(fetchedData || []);
-      } catch (error) {
-        console.error('Error fetching clients:', error);
-        setData([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Datele primite din props le actualizează părintele; altfel reîncărcăm periodic
+  const hasInitialData = initialData.length > 0;
+  useLiveRefresh(
+    useCallback(() => (hasInitialData ? undefined : fetchData(true)), [hasInitialData, fetchData]),
+    REFRESH_MS
+  );
 
   //* --- Construim lista de clienți unici
   const clientsMap = useMemo(() => {
@@ -161,12 +171,7 @@ export function DataTableClients({ data: initialData = [] }: { data?: RawRecord[
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex items-center gap-3 text-stone-500">
-          <div className="w-5 h-5 border-2 border-stone-700 border-t-amber-500 rounded-full animate-spin" />
-          <span>Se încarcă clienții...</span>
-        </div>
-      </div>
+      <TableSkeleton rows={8} cols={5} label="Se încarcă clienții" />
     );
   }
 

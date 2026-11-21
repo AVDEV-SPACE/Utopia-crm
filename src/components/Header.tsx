@@ -9,14 +9,15 @@ import AvailabilityModal from './AvailabilityModal';
 import AddClientModal from './AddClientModal';
 import ThemeToggle from './ThemeToggle';
 import type { Lead } from '@/services/leads/types';
+import { NAV_ITEMS } from '@/lib/navConfig';
+import { useBeginExit } from '@/components/motion/PageTransition';
 
-const MENU_PAGES = [
-  { name: 'Overview',   href: '/overview',              keywords: ['overview','dashboard','acasa','home','ov'] },
-  { name: 'Bookings',   href: '/bookings',              keywords: ['bookings','programari','rezervari','bo'] },
-  { name: 'Chats',  href: '/messaging',             keywords: ['messaging','mesaje','chat','conversatii','me'] },
-  { name: 'Templates',  href: '/educational-templates', keywords: ['templates','sabloane','educational','te'] },
-  { name: 'Lead Generation', href: '/lead-generation',  keywords: ['leads','lead','generation','prospecti','lg'] },
-];
+// Paginile căutabile vin din aceeași configurație ca sidebar-ul
+const MENU_PAGES = NAV_ITEMS.map((item) => ({
+  name: item.name,
+  href: item.href,
+  keywords: [item.name.toLowerCase(), ...item.keywords],
+}));
 
 /** Un rezultat de căutare: pagină din meniu sau lead din baza de date. */
 type SearchResult =
@@ -25,6 +26,7 @@ type SearchResult =
 
 export default function Header() {
   const router = useRouter();
+  const beginExit = useBeginExit();
 
   const [isModalOpen,             setIsModalOpen]             = useState(false);
   const [isAvailabilityModalOpen, setIsAvailabilityModalOpen] = useState(false);
@@ -77,6 +79,7 @@ export default function Header() {
   ];
 
   const handleNavigate = (href: string) => {
+    beginExit(href);
     router.push(href);
     setSearchQuery(''); setShowSearchResults(false); setSelectedResultIndex(-1);
   };
@@ -96,7 +99,7 @@ export default function Header() {
     <>
       {/* ── HEADER ──────────────────────────────────────────────────────── */}
       <header
-        className="px-4 lg:px-8 h-14 flex items-center border-b border-stone-800/60 sticky top-0 z-30"
+        className="px-4 lg:px-8 h-14 flex items-center sticky top-0 z-30"
       >
         <div className="flex items-center justify-between gap-4 w-full">
 
@@ -114,7 +117,7 @@ export default function Header() {
                 onKeyDown={handleSearchKeyDown}
                 onFocus={() => searchQuery.length > 0 && setShowSearchResults(true)}
                 onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
-                className="w-full pl-9 pr-4 h-9 bg-stone-900/60 text-stone-300 placeholder-stone-700 border border-stone-800/60 rounded-xl focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/10 transition text-sm"
+                className="header-control w-full pl-9 pr-4 h-9 bg-stone-900/60 text-stone-300 placeholder-stone-700 border border-stone-800/60 rounded-xl focus:outline-none focus:border-amber-500/40 focus:ring-1 focus:ring-amber-500/10 transition text-sm"
               />
               {showSearchResults && results.length > 0 && (
                 <div
@@ -162,7 +165,7 @@ export default function Header() {
 
             <button
               onClick={() => setIsAvailabilityModalOpen(true)}
-              className="flex items-center gap-2 px-3 h-9 border rounded-xl transition-all text-sm font-medium selector-bg selector-border text-secondary"
+              className="header-control flex items-center gap-2 px-3.5 h-9 border rounded-xl transition-all text-sm font-medium selector-bg selector-border text-secondary"
               title="Gestionează disponibilitatea"
             >
               <Calendar className="w-4 h-4" />
@@ -171,7 +174,7 @@ export default function Header() {
 
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-4 h-9 bg-amber-500 hover:bg-amber-400 active:scale-95 text-black font-semibold rounded-xl transition-all shadow-md shadow-amber-500/20 text-sm whitespace-nowrap"
+              className="header-control flex items-center gap-2 px-3.5 h-9 border border-amber-500 bg-amber-500 hover:bg-amber-400 text-white font-medium rounded-xl transition-all text-sm whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
               <span className="hidden md:inline">Add Client</span>

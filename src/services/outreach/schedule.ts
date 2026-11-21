@@ -3,13 +3,59 @@ import type { OutreachChannel } from './types';
 /** Fusul orar după care se calculează ferestrele de trimitere și plafoanele. */
 export const OUTREACH_TZ = 'Europe/Bucharest';
 
-/** Intervalele de trimitere automată [început, sfârșit), ora României. */
-const WEEKDAY_WINDOWS: readonly (readonly [number, number])[] = [
-  [8, 10],
-  [18, 22],
-];
-const WEEKEND_WINDOWS: readonly (readonly [number, number])[] = [[10, 15]];
-export const SEND_WINDOWS_LABEL = 'luni–vineri 08:00–10:00 și 18:00–22:00, weekend 10:00–15:00';
+type Window = readonly [number, number];
+
+/** Intervalele implicite de trimitere automată [început, sfârșit), ora României. */
+const DEFAULT_WINDOWS = '08-10,18-22;10-15';
+
+/**
+ * Un set de intervale („08-10,18-22”) → [[8, 10], [18, 22]]. Orele sunt întregi
+ * 0–24, începutul mai mic decât sfârșitul. `null` dacă ceva e invalid; un set
+ * gol („” sau „-”) = nicio trimitere în acele zile.
+ */
+function parseWindowSet(raw: string): Window[] | null {
+  const text = raw.trim();
+  if (text === '' || text === '-') return [];
+  const windows: Window[] = [];
+  for (const part of text.split(',')) {
+    const match = part.trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+    if (!match) return null;
+    const start = Number(match[1]);
+    const end = Number(match[2]);
+    if (start < 0 || end > 24 || start >= end) return null;
+    windows.push([start, end]);
+  }
+  return windows;
+}
+
+/**
+ * Intervalele de trimitere din `OUTREACH_SEND_WINDOWS`: „luni-vineri;weekend”,
+ * de exemplu `08-10,18-22;10-15`. O valoare invalidă (sau lipsă) → implicitul,
+ * ca o greșeală de tastare să nu deschidă trimiterea toată ziua.
+ */
+export function sendWindows(): { weekday: Window[]; weekend: Window[] } {
+  const parse = (raw: string) => {
+    const [weekday, weekend, ...rest] = raw.split(';');
+    if (rest.length > 0 || weekend === undefined) return null;
+    const wd = parseWindowSet(weekday);
+    const we = parseWindowSet(weekend);
+    return wd && we ? { weekday: wd, weekend: we } : null;
+  };
+  const configured = process.env.OUTREACH_SEND_WINDOWS?.trim();
+  const parsed = configured ? parse(configured) : null;
+  if (configured && !parsed) console.warn(`OUTREACH_SEND_WINDOWS invalid („${configured}”), se folosesc intervalele implicite`);
+  return parsed ?? parse(DEFAULT_WINDOWS)!;
+}
+
+const pad = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
+const describe = (windows: Window[]) =>
+  windows.length === 0 ? 'fără trimiteri' : windows.map(([s, e]) => `${pad(s)}–${pad(e)}`).join(' și ');
+
+/** Intervalele, pe înțelesul utilizatorului (mesaje de stare și panoul de campanie). */
+export function sendWindowsLabel(): string {
+  const { weekday, weekend } = sendWindows();
+  return `luni–vineri ${describe(weekday)}, weekend ${describe(weekend)}`;
+}
 
 /**
  * Bugetul unei rulări în fundal (planificare, inbox). Rutele cron răspund
@@ -69,9 +115,10 @@ export function bucharestClock(now = new Date()): { weekday: number; hour: numbe
 /** `null` dacă acum se poate trimite, altfel motivul. */
 export function sendWindowBlock(now = new Date()): string | null {
   const { weekday, hour } = bucharestClock(now);
-  const windows = weekday >= 6 ? WEEKEND_WINDOWS : WEEKDAY_WINDOWS;
+  const all = sendWindows();
+  const windows = weekday >= 6 ? all.weekend : all.weekday;
   if (!windows.some(([start, end]) => hour >= start && hour < end)) {
-    return `în afara intervalelor ${SEND_WINDOWS_LABEL} (${OUTREACH_TZ})`;
+    return `în afara intervalelor ${sendWindowsLabel()} (${OUTREACH_TZ})`;
   }
   return null;
 }

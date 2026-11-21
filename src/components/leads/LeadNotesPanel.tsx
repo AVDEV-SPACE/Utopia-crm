@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { StageBadge } from '@/components/pipeline/StageBadge';
 import type { LeadNote, NoteKind } from '@/services/leads/notes';
 import type { TimelineEvent, TimelineItem, TimelineMessage } from '@/services/leads/timeline';
+import { ListSkeleton } from '@/components/ui/skeleton';
 
 /** Tipurile pe care le poate alege utilizatorul ('status' e generat automat). */
 const KIND_OPTIONS: { value: Exclude<NoteKind, 'status'>; label: string }[] = [
@@ -227,9 +228,7 @@ export function LeadNotesPanel({ leadId }: { leadId: string }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-10 text-stone-500">
-          <Loader2 className="animate-spin mr-2" size={16} /> Se încarcă istoricul...
-        </div>
+        <ListSkeleton rows={4} />
       ) : error ? (
         <p className="text-center py-10 text-sm text-red-400">{error}</p>
       ) : entries.length === 0 ? (

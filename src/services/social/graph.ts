@@ -53,7 +53,14 @@ function appSecretProof(token: string): string | null {
 
 async function graph<T>(
   path: string,
-  options: { token: string; method?: 'GET' | 'POST'; params?: Record<string, string>; body?: Record<string, unknown> }
+  options: {
+    token: string;
+    method?: 'GET' | 'POST';
+    params?: Record<string, string>;
+    body?: Record<string, unknown>;
+    /** Implicit 15s; Facebook descarcă video-ul în timpul cererii, deci /videos are nevoie de mai mult */
+    timeoutMs?: number;
+  }
 ): Promise<T> {
   const url = new URL(`https://graph.facebook.com/${graphVersion()}/${path.replace(/^\//, '')}`);
   for (const [key, value] of Object.entries(options.params ?? {})) url.searchParams.set(key, value);
@@ -69,7 +76,7 @@ async function graph<T>(
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal: AbortSignal.timeout(options.timeoutMs ?? TIMEOUT_MS),
     });
   } catch (error) {
     const timeout = (error as Error).name === 'TimeoutError';
@@ -162,43 +169,142 @@ export async function publishFacebookPost(caption: string, imageUrl?: string | n
   return data.id;
 }
 
-/** Cât așteptăm ca Instagram să proceseze imaginea înainte de publicare. */
-const IG_CONTAINER_WAIT_MS = 60_000;
+/**
+ * Postare cu mai multe imagini: fiecare imagine se încarcă nepublicată
+ * (/photos, `published: false`), apoi o singură postare le atașează (/feed).
+ */
+export async function publishFacebookAlbum(caption: string, imageUrls: string[]): Promise<string> {
+  const page = requireId(fbPageId(), 'FB_PAGE_ID');
+  const token = await pageToken();
+  const photoIds: string[] = [];
+  for (const url of imageUrls) {
+    const photo = await graph<{ id?: string }>(`${page}/photos`, { token, method: 'POST', body: { url, published: false } });
+    if (!photo.id) throw new GraphError('Facebook nu a acceptat o imagine din postare', 502, null, null);
+    photoIds.push(photo.id);
+  }
+  const data = await graph<{ id?: string }>(`${page}/feed`, {
+    token,
+    method: 'POST',
+    body: { message: caption, attached_media: photoIds.map((id) => ({ media_fbid: id })) },
+  });
+  if (!data.id) throw new GraphError('Facebook nu a întors id-ul postării', 502, null, null);
+  return data.id;
+}
+
+/** Video pe pagină (/videos, din URL public). Facebook îl procesează după răspuns; întoarce id-ul video-ului. */
+export async function publishFacebookVideo(caption: string, videoUrl: string): Promise<string> {
+  const page = requireId(fbPageId(), 'FB_PAGE_ID');
+  const data = await graph<{ id?: string }>(`${page}/videos`, {
+    token: await pageToken(),
+    method: 'POST',
+    body: { file_url: videoUrl, description: caption },
+    timeoutMs: 90_000,
+  });
+  if (!data.id) throw new GraphError('Facebook nu a întors id-ul video-ului', 502, null, null);
+  return data.id;
+}
+
+/** Cât așteptăm ca Instagram să proceseze media înainte de publicare (video-urile durează mai mult). */
+const IG_IMAGE_WAIT_MS = 60_000;
+const IG_VIDEO_WAIT_MS = 180_000;
 const IG_POLL_MS = 3_000;
+
+export interface InstagramMediaItem {
+  url: string;
+  kind: 'image' | 'video';
+}
+
+async function createInstagramContainer(ig: string, token: string, body: Record<string, unknown>): Promise<string> {
+  const container = await graph<{ id?: string }>(`${ig}/media`, { token, method: 'POST', body });
+  if (!container.id) throw new GraphError('Instagram nu a creat containerul media', 502, null, null);
+  return container.id;
+}
+
+/** Așteaptă procesarea containerului (`status_code` FINISHED). */
+async function waitForContainer(id: string, token: string, waitMs: number): Promise<void> {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const status = await graph<{ status_code?: string }>(id, { token, params: { fields: 'status_code' } });
+    if (status.status_code === 'FINISHED') return;
+    if (status.status_code === 'ERROR' || status.status_code === 'EXPIRED') {
+      throw new GraphError(`Instagram a respins media (${status.status_code})`, 422, null, null);
+    }
+    if (Date.now() > deadline) throw new GraphError('Instagram procesează încă media — reîncearcă', 504, null, null);
+    await sleep(IG_POLL_MS);
+  }
+}
+
+/**
+ * Limita de publicare Instagram (50 de postări / 24h). Verificarea dinainte
+ * evită un container creat degeaba; eșecul verificării nu blochează publicarea.
+ */
+async function assertInstagramQuota(ig: string, token: string): Promise<void> {
+  const data = await graph<{ data?: { quota_usage?: number; config?: { quota_total?: number } }[] }>(
+    `${ig}/content_publishing_limit`,
+    { token, params: { fields: 'quota_usage,config' } }
+  ).catch(() => null);
+  const limit = data?.data?.[0];
+  if (limit?.config?.quota_total && (limit.quota_usage ?? 0) >= limit.config.quota_total) {
+    throw new GraphError(`Limita Instagram de ${limit.config.quota_total} postări în 24h a fost atinsă`, 429, null, null);
+  }
+}
+
+async function publishInstagramContainer(ig: string, token: string, creationId: string): Promise<string> {
+  const published = await graph<{ id?: string }>(`${ig}/media_publish`, {
+    token,
+    method: 'POST',
+    body: { creation_id: creationId },
+  });
+  if (!published.id) throw new GraphError('Instagram nu a întors id-ul postării', 502, null, null);
+  return published.id;
+}
 
 /**
  * Postare Instagram în doi pași: containerul media (/media), așteptarea
- * procesării (`status_code` FINISHED), apoi publicarea (/media_publish).
- * Instagram cere imagine (URL public, JPEG).
+ * procesării, apoi publicarea (/media_publish). Instagram cere imagine JPEG prin URL public.
  */
 export async function publishInstagramPost(caption: string, imageUrl: string): Promise<string> {
   const ig = requireId(igBusinessId(), 'IG_BUSINESS_ID');
   const token = await pageToken();
-  const container = await graph<{ id?: string }>(`${ig}/media`, {
-    token,
-    method: 'POST',
-    body: { image_url: imageUrl, caption },
-  });
-  if (!container.id) throw new GraphError('Instagram nu a creat containerul media', 502, null, null);
+  await assertInstagramQuota(ig, token);
+  const id = await createInstagramContainer(ig, token, { image_url: imageUrl, caption });
+  await waitForContainer(id, token, IG_IMAGE_WAIT_MS);
+  return publishInstagramContainer(ig, token, id);
+}
 
-  const deadline = Date.now() + IG_CONTAINER_WAIT_MS;
-  for (;;) {
-    const status = await graph<{ status_code?: string }>(container.id, { token, params: { fields: 'status_code' } });
-    if (status.status_code === 'FINISHED') break;
-    if (status.status_code === 'ERROR' || status.status_code === 'EXPIRED') {
-      throw new GraphError(`Instagram a respins media (${status.status_code})`, 422, null, null);
-    }
-    if (Date.now() > deadline) throw new GraphError('Instagram procesează încă imaginea — reîncearcă', 504, null, null);
-    await sleep(IG_POLL_MS);
+/** Reel: container `REELS` cu video, distribuit și în feed. */
+export async function publishInstagramReel(caption: string, videoUrl: string): Promise<string> {
+  const ig = requireId(igBusinessId(), 'IG_BUSINESS_ID');
+  const token = await pageToken();
+  await assertInstagramQuota(ig, token);
+  const id = await createInstagramContainer(ig, token, { media_type: 'REELS', video_url: videoUrl, caption, share_to_feed: true });
+  await waitForContainer(id, token, IG_VIDEO_WAIT_MS);
+  return publishInstagramContainer(ig, token, id);
+}
+
+/**
+ * Carusel (2–10 elemente, imagini și/sau video): containerele-copil se creează
+ * toate întâi (Instagram le procesează în paralel), apoi containerul `CAROUSEL`.
+ */
+export async function publishInstagramCarousel(caption: string, items: InstagramMediaItem[]): Promise<string> {
+  const ig = requireId(igBusinessId(), 'IG_BUSINESS_ID');
+  const token = await pageToken();
+  await assertInstagramQuota(ig, token);
+
+  const children: string[] = [];
+  for (const item of items) {
+    const body =
+      item.kind === 'video'
+        ? { media_type: 'VIDEO', video_url: item.url, is_carousel_item: true }
+        : { image_url: item.url, is_carousel_item: true };
+    children.push(await createInstagramContainer(ig, token, body));
   }
+  const waitMs = items.some((item) => item.kind === 'video') ? IG_VIDEO_WAIT_MS : IG_IMAGE_WAIT_MS;
+  for (const child of children) await waitForContainer(child, token, waitMs);
 
-  const published = await graph<{ id?: string }>(`${ig}/media_publish`, {
-    token,
-    method: 'POST',
-    body: { creation_id: container.id },
-  });
-  if (!published.id) throw new GraphError('Instagram nu a întors id-ul postării', 502, null, null);
-  return published.id;
+  const id = await createInstagramContainer(ig, token, { media_type: 'CAROUSEL', children: children.join(','), caption });
+  await waitForContainer(id, token, IG_IMAGE_WAIT_MS);
+  return publishInstagramContainer(ig, token, id);
 }
 
 // ── Profiluri ───────────────────────────────────────────────────────────────

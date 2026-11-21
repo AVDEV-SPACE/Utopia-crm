@@ -326,12 +326,12 @@ html[data-theme="light"] {
 }
 
 /* Apply gradient bg + ::before only to elements WITHOUT overflow-hidden */
-.rounded-2xl.border:not(.overflow-hidden),
-.rounded-xl.border:not(.overflow-hidden),
-.rounded-lg.border:not(.overflow-hidden),
-.rounded-2xl[class*="border-stone"]:not(.overflow-hidden),
-.rounded-xl[class*="border-stone"]:not(.overflow-hidden),
-.rounded-lg[class*="border-stone"]:not(.overflow-hidden) {
+.rounded-2xl.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto),
+.rounded-xl.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto),
+.rounded-lg.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto),
+.rounded-2xl[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto),
+.rounded-xl[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto),
+.rounded-lg[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto) {
   position: relative;
   background-image: linear-gradient(
     var(--bg-grad-angle),
@@ -340,12 +340,12 @@ html[data-theme="light"] {
   ) !important;
 }
 
-.rounded-2xl.border:not(.overflow-hidden)::before,
-.rounded-xl.border:not(.overflow-hidden)::before,
-.rounded-lg.border:not(.overflow-hidden)::before,
-.rounded-2xl[class*="border-stone"]:not(.overflow-hidden)::before,
-.rounded-xl[class*="border-stone"]:not(.overflow-hidden)::before,
-.rounded-lg[class*="border-stone"]:not(.overflow-hidden)::before {
+.rounded-2xl.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto)::before,
+.rounded-xl.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto)::before,
+.rounded-lg.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto)::before,
+.rounded-2xl[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto)::before,
+.rounded-xl[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto)::before,
+.rounded-lg[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto)::before {
   content: '';
   pointer-events: none;
   position: absolute;
@@ -370,12 +370,12 @@ html[data-theme="light"] {
 }
 
 /* Content stays above border overlay */
-.rounded-2xl.border:not(.overflow-hidden) > *,
-.rounded-xl.border:not(.overflow-hidden) > *,
-.rounded-lg.border:not(.overflow-hidden) > *,
-.rounded-2xl[class*="border-stone"]:not(.overflow-hidden) > *,
-.rounded-xl[class*="border-stone"]:not(.overflow-hidden) > *,
-.rounded-lg[class*="border-stone"]:not(.overflow-hidden) > * {
+.rounded-2xl.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto) > *,
+.rounded-xl.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto) > *,
+.rounded-lg.border:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto) > *,
+.rounded-2xl[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto) > *,
+.rounded-xl[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto) > *,
+.rounded-lg[class*="border-stone"]:not(.overflow-hidden):not(.overflow-x-auto):not(.overflow-auto):not(.overflow-y-auto) > * {
   position: relative;
   z-index: 1;
 }
@@ -403,11 +403,11 @@ html:not([data-theme]) {
 }
 
 /* Doar fundalul structural al paginii — suprafețele vin din scara de culori */
+/* Culoarea de bază e pe `html`; `body` și `main` rămân transparente, altfel ar
+   acoperi fundalul cu glow-uri (`.app-backdrop`, fixed, z-index -1). */
 html[data-theme="dark"] body,
-html:not([data-theme]) body,
-html[data-theme="dark"] main,
-html:not([data-theme]) main {
-  background-color: var(--ink-900) !important;
+html:not([data-theme]) body {
+  background-color: transparent !important;
 }
 
 /* bg-[#0d0d0d] hardcodat — cel mai închis nivel */
@@ -416,14 +416,16 @@ html:not([data-theme]) [class*="bg-\\[#0d0d0d\\]"] {
   background-color: var(--ink-950) !important;
 }
 
-/* Sidebar și header — ușor ridicate față de fundalul paginii */
+/* Sidebar-ul e glass (vezi `.sidebar-glass`); header-ul n-are fundal propriu,
+   lasă să se vadă fundalul cu lumini al aplicației. */
 html[data-theme="dark"] aside,
 html:not([data-theme]) aside {
-  background-color: var(--ink-800) !important;
+  background-color: var(--sidebar-glass) !important;
 }
 html[data-theme="dark"] header,
 html:not([data-theme]) header {
-  background-color: rgb(23 21 18 / 0.97) !important;
+  background-color: transparent !important;
+  border-bottom-color: transparent !important;
 }
 
 /* Bordurile stone → linie neutră discretă */
@@ -451,9 +453,8 @@ html[data-theme="light"] {
 }
 
 /* Doar fundalul structural al paginii — suprafețele vin din scara de culori */
-html[data-theme="light"] body,
-html[data-theme="light"] main {
-  background-color: var(--paper-050) !important;
+html[data-theme="light"] body {
+  background-color: transparent !important;
 }
 
 /* `text-white` e hardcodat pe titluri și pe butoane pline deopotrivă:
@@ -474,12 +475,11 @@ html[data-theme="light"] .border-stone-700 {
 
 /* Sidebar and header */
 html[data-theme="light"] aside {
-  background-color: var(--paper-surface) !important;
-  border-right-color: rgb(var(--line-rgb) / 0.22) !important;
+  background-color: var(--sidebar-glass) !important;
 }
 html[data-theme="light"] header {
-  background-color: rgb(251 250 247 / 0.97) !important;
-  border-bottom-color: rgb(var(--line-rgb) / 0.22) !important;
+  background-color: transparent !important;
+  border-bottom-color: transparent !important;
 }
 
 /* Salon selector button backgrounds */
@@ -628,8 +628,8 @@ html[data-theme="light"] .fixed.inset-0.z-50 input {
   border-radius: var(--app-radius);
 }
 
-aside nav a,
-aside nav button {
+aside nav a:not(.nav-item),
+aside nav button:not(.nav-item) {
   border-radius: var(--app-radius) !important;
 }
 
@@ -669,7 +669,7 @@ header .flex-1.relative > div.absolute {
 }
 
 header input[type="text"] {
-  height: 2.375rem;
+  height: 2.25rem; /* aceeași înălțime ca butoanele din header (h-9) */
   box-sizing: border-box;
 }
 
@@ -903,4 +903,292 @@ html:not([data-theme]) .fixed.inset-0.bg-black\/70 select {
 html[data-theme="dark"] .fixed.inset-0.bg-black\/70 .bg-stone-900\/40,
 html:not([data-theme]) .fixed.inset-0.bg-black\/70 .bg-stone-900\/40 {
   background-color: rgb(33 30 26 / 0.60) !important;
+}
+/* ═══════════════════════════════════════════════════════════════════════
+   MOTION & SURFACES  —  fundal cu lumini, carduri glass, pill-ul din meniu
+   Accentul e `--brand` (portocaliu). `--accent` rămâne al shadcn (suprafață
+   neutră), de aceea tokenii de mai jos nu îl redefinesc.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root,
+html[data-theme="dark"],
+html:not([data-theme]) {
+  --bg: rgb(14 13 11);
+  --fg: rgb(244 241 236);
+  --accent-2: #E0A43A;               /* a doua nuanță caldă: doar serii secundare */
+
+  --surface-1: color-mix(in oklab, var(--fg) 4%, transparent);
+  --surface-2: color-mix(in oklab, var(--fg) 7%, transparent);
+  --surface-accent: color-mix(in oklab, var(--brand) 10%, transparent);
+  --surface-accent-2: color-mix(in oklab, var(--accent-2) 9%, transparent);
+  --card-border: rgb(var(--line-rgb) / 0.14);
+  --card-border-hover: rgb(var(--line-rgb) / 0.18);
+  --highlight-top: inset 0 1px 0 color-mix(in oklab, var(--fg) 8%, transparent);
+  --card-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.5);
+
+  --glow-strength: 9%;
+  --bands-opacity: 1;
+  --grain-opacity: 0.035;
+  --nav-surface: var(--ink-800);
+
+  --radius-card: 18px;
+  --radius-control: 10px;
+  --radius-pill: 14px;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-inout: cubic-bezier(.65, 0, .35, 1);
+  --dur-fast: 160ms;
+  --dur-base: 320ms;
+  --dur-slow: 550ms;
+}
+
+html[data-theme="light"] {
+  --bg: rgb(244 241 236);
+  --fg: rgb(14 13 11);
+  --accent-2: #C98A1E;
+
+  /* Pe hârtie, sticla e albă, nu o tentă de cerneală */
+  --surface-1: rgb(255 255 255 / 0.55);
+  --surface-2: rgb(255 255 255 / 0.82);
+  --surface-accent: color-mix(in oklab, var(--brand) 8%, transparent);
+  --surface-accent-2: color-mix(in oklab, var(--accent-2) 8%, transparent);
+  --card-border: rgb(var(--line-rgb) / 0.12);
+  --card-border-hover: rgb(var(--line-rgb) / 0.18);
+  --highlight-top: inset 0 1px 0 rgb(255 255 255 / 0.9);
+  --card-shadow: 0 10px 30px -14px rgb(60 40 20 / 0.18);
+
+  --glow-strength: 5%;
+  --bands-opacity: 0;
+  --grain-opacity: 0.025;
+  --nav-surface: var(--paper-surface);
+}
+
+/* ── Fundalul aplicației: lumini difuze + benzi verticale + grain ───────── */
+.app-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background:
+    radial-gradient(60vw 55vh at 0% 0%, color-mix(in oklab, var(--brand) var(--glow-strength), transparent), transparent 70%),
+    radial-gradient(55vw 60vh at 100% 100%, color-mix(in oklab, var(--brand) var(--glow-strength), transparent), transparent 70%),
+    radial-gradient(35vw 35vh at 75% 8%, color-mix(in oklab, var(--accent-2) 3%, transparent), transparent 70%);
+}
+/* Benzi de lumină, ca printr-o sticlă mată (doar în dark) */
+.app-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: -10%;
+  opacity: var(--bands-opacity);
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 140px,
+    color-mix(in oklab, var(--fg) 2.5%, transparent) 140px 210px,
+    transparent 210px 360px
+  );
+  filter: blur(28px);
+}
+/* Grain fin, contra banding-ului gradienților */
+.app-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Carduri glass ──────────────────────────────────────────────────────── */
+.glass-card {
+  position: relative;
+  background-color: var(--surface-1);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  backdrop-filter: blur(16px) saturate(120%);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--highlight-top), var(--card-shadow);
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.glass-card:hover {
+  background-color: var(--surface-2);
+  border-color: var(--card-border-hover);
+}
+/* Panoul principal al rutei: glow subtil de accent pe marginea de sus */
+.glass-card--hero::after {
+  content: '';
+  position: absolute;
+  inset: -1px 12% auto;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(var(--brand-rgb) / 0.55), transparent);
+}
+/* KPI tintat: gradient foarte slab din culoarea seriei */
+.glass-card--tint   { background-image: linear-gradient(140deg, var(--surface-accent) 0%, transparent 65%); }
+.glass-card--tint-2 { background-image: linear-gradient(140deg, var(--surface-accent-2) 0%, transparent 65%); }
+/* Card interior (mini-statistici): un nivel mai deschis, fără umbră */
+.glass-inner {
+  background-color: var(--surface-2);
+  border-radius: 12px;
+}
+
+/* ── Sidebar: item-uri + pill-ul activ (un singur pill pentru toată lista) ─ */
+.nav-item {
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.nav-item:not([aria-current="page"]):hover { background-color: var(--surface-1); }
+.nav-pill,
+.nav-pill-inner {
+  position: absolute;
+  inset: 0;
+  /* Lista are `space-y-*`, care pune margin-bottom pe fiecare copil — și pe
+     aceste straturi absolute. Cu margine, stratul era mai scurt decât lista și
+     pill-ul ieșea deplasat în sus față de item. */
+  margin: 0 !important;
+  pointer-events: none;
+  will-change: clip-path;
+  /* Gol până când JS-ul îl poziționează (altfel, înainte de hidratare, ar acoperi toată lista) */
+  clip-path: inset(0 0 100% 0);
+}
+/* Stratul exterior = conturul de accent; cel interior (cu 1px mai mic) = umplerea */
+.nav-pill { background: rgb(var(--brand-rgb) / 0.32); }
+.nav-pill-inner { background: color-mix(in oklab, var(--brand) 11%, var(--nav-surface)); }
+/* Grupurile se restrâng din grid-template-rows (0fr ↔ 1fr), fără înălțimi fixe */
+.nav-group-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-base) var(--ease-out);
+}
+.nav-group-body[data-open="false"] { grid-template-rows: 0fr; }
+.nav-group-body > ul { min-height: 0; overflow: hidden; }
+
+/* ── Segmented control (folosește același pill, pe orizontală) ─────────── */
+.seg-pill { position: absolute; inset: 0; pointer-events: none; background: rgb(var(--brand-rgb) / 0.14); clip-path: inset(0 100% 0 0); }
+
+/* ── Micro-interacțiuni (în `base`, ca utilitarele Tailwind să le poată suprascrie) ─ */
+@layer base {
+  button:active:not(:disabled) { scale: .97; }
+  .tabular-nums, [data-countup] { font-variant-numeric: tabular-nums; }
+}
+button.bg-amber-500:hover:not(:disabled),
+a.bg-amber-500:hover {
+  box-shadow: 0 8px 28px -8px rgb(var(--brand-rgb) / 0.6);
+}
+
+/* ── Reduced motion: fără mișcare, doar fade-uri scurte (JS-ul face restul) ─ */
+@media (prefers-reduced-motion: reduce) {
+  .nav-group-body { transition: none; }
+  .glass-card, .nav-item { transition-duration: 120ms; }
+  @layer base {
+    button:active:not(:disabled) { scale: none; }
+  }
+}
+
+/* ── Tabele: conturul stă pe un container care NU face scroll ─────────────
+   Pe un container cu overflow-x-auto, orice pseudo-element absolut (conturul
+   gradient de mai sus) derulează odată cu conținutul și apare ca a doua bară
+   verticală. `.table-shell` ține conturul, `.table-scroll` face scroll-ul. */
+.table-shell {
+  position: relative;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background-color: var(--surface-1);
+  box-shadow: var(--highlight-top);
+  overflow: hidden;
+}
+.table-scroll { overflow-x: auto; }
+.table-shell thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background-color: color-mix(in oklab, var(--nav-surface) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.table-shell tbody tr { transition: background-color var(--dur-fast) var(--ease-out); }
+.table-shell tbody tr:hover { background-color: var(--surface-1); }
+
+/* ── Bara de filtre (Leads / Pipeline) ─────────────────────────────────── */
+.filter-bar {
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  background-color: color-mix(in oklab, var(--nav-surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  backdrop-filter: blur(16px) saturate(120%);
+  box-shadow: var(--highlight-top), var(--card-shadow);
+}
+/* Control compact comun: căutare, dropdown-uri de filtru, butoane secundare */
+.ui-control {
+  height: 2rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-control);
+  background-color: var(--surface-1);
+  transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast);
+}
+.ui-control:hover { background-color: var(--surface-2); border-color: var(--card-border-hover); }
+.ui-control[data-active="true"] {
+  background-color: rgb(var(--brand-rgb) / 0.12);
+  border-color: rgb(var(--brand-rgb) / 0.35);
+}
+
+/* ── Sidebar glass: plutește la 0.35rem de margini, rotunjit sus și jos ─── */
+:root,
+html[data-theme="dark"],
+html:not([data-theme]) {
+  --sidebar-glass: color-mix(in oklab, var(--ink-800) 62%, transparent);
+  --skeleton-base: color-mix(in oklab, var(--fg) 6%, transparent);
+  --skeleton-shine: color-mix(in oklab, var(--fg) 11%, transparent);
+}
+html[data-theme="light"] {
+  --sidebar-glass: rgb(255 255 255 / 0.55);
+  --skeleton-base: rgb(var(--line-rgb) / 0.06);
+  --skeleton-shine: rgb(var(--line-rgb) / 0.11);
+}
+.sidebar-glass {
+  margin: 0.35rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  backdrop-filter: blur(20px) saturate(130%);
+  box-shadow: var(--highlight-top), var(--card-shadow);
+  overflow: hidden;
+}
+/* Pe mobil sidebar-ul e drawer peste conținut: mai opac, ca textul să rămână lizibil */
+@media (max-width: 1023px) {
+  html[data-theme="dark"] aside.sidebar-glass,
+  html:not([data-theme]) aside.sidebar-glass { background-color: color-mix(in oklab, var(--ink-800) 92%, transparent) !important; }
+  html[data-theme="light"] aside.sidebar-glass { background-color: rgb(251 250 247 / 0.94) !important; }
+}
+
+/* ── Header: toate controalele au exact aceeași înălțime (36px) ────────── */
+header .header-control {
+  height: 2.25rem !important;
+  min-height: 2.25rem;
+  box-sizing: border-box;
+  /* Un singur contur, pe marginea exterioară: sistemul global de bordură-gradient
+     (`.rounded-xl.border::before`) desena un al doilea contur cu 1px înăuntru, iar
+     Availability arăta mai mic decât Add Client, deși ambele au exact 36px. */
+  background-image: none !important;
+}
+header .header-control::before { content: none !important; }
+/* Glow-ul butonului primar e simetric în header, nu coboară sub buton */
+header button.header-control.bg-amber-500:hover:not(:disabled) {
+  box-shadow: 0 0 18px -6px rgb(var(--brand-rgb) / 0.6);
+}
+
+/* ── Skeleton: aceeași formă ca layout-ul final, deci zero layout shift ── */
+.skeleton {
+  display: block;
+  border-radius: 8px;
+  background-color: var(--skeleton-base);
+  background-image: linear-gradient(90deg, transparent 0%, var(--skeleton-shine) 50%, transparent 100%);
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.4s var(--ease-inout) infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 150% 0; }
+  to   { background-position: -50% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background-image: none; }
 }

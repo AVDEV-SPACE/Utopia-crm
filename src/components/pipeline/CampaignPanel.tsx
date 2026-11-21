@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { ChevronDown, Loader2, Megaphone, Send, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { CampaignAudience } from '@/services/outreach/repository';
-import { SEND_WINDOWS_LABEL } from '@/services/outreach/schedule';
 import type { CampaignFilters, PlanResult } from '@/services/outreach/types';
 import { MultiValueInput } from './MultiValueInput';
 
@@ -19,6 +18,8 @@ interface Preview {
   testMode: boolean;
   step1Template: boolean;
   sendCap: number;
+  /** Intervalele de trimitere (din OUTREACH_SEND_WINDOWS, pe server) */
+  sendWindows: string;
 }
 
 /** Leaduri planificate pe cerere (fiecare poate cere un apel AI pentru follow-up-uri). */
@@ -152,7 +153,7 @@ export function CampaignPanel({ onChanged }: CampaignPanelProps) {
   const noPitch = audience && preview && !preview.step1Template ? audience.withEmail - audience.withPitch : 0;
 
   return (
-    <section className="rounded-xl border border-stone-800/60 bg-stone-900/60">
+    <section className="glass-card">
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
         <Megaphone size={16} className="text-amber-400" />
         <h2 className="text-sm font-semibold text-stone-100">Campanie outreach</h2>
@@ -166,7 +167,7 @@ export function CampaignPanel({ onChanged }: CampaignPanelProps) {
           ) : null}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" disabled={sending || planning !== null} onClick={sendNow} title={`Trimite acum pașii ajunși la termen (maximum 2; ${SEND_WINDOWS_LABEL})`}>
+          <Button size="sm" variant="outline" disabled={sending || planning !== null} onClick={sendNow} title={`Trimite acum pașii ajunși la termen (maximum 2; ${preview?.sendWindows ?? 'în intervalele de trimitere'})`}>
             {sending ? <Loader2 className="animate-spin" /> : <Send />}
             Trimite acum
           </Button>
@@ -284,7 +285,7 @@ export function CampaignPanel({ onChanged }: CampaignPanelProps) {
               </Button>
             )}
             <span className="text-[11px] text-stone-600">
-              Pitch personalizat + 2 follow-up-uri (ziua 4 și 9), cu modelele din „Outreach email”. Pleacă treptat: {SEND_WINDOWS_LABEL},
+              Pitch personalizat + 2 follow-up-uri (ziua 4 și 9), cu modelele din „Outreach email”. Pleacă treptat: {preview?.sendWindows ?? 'în intervalele de trimitere'},
               maximum {preview?.sendCap ?? '—'} emailuri/zi; un răspuns oprește secvența.
             </span>
           </div>

@@ -13,6 +13,7 @@ import { LeadComposer } from '@/components/messages/LeadComposer';
 import { LeadDetailsForm } from '@/components/leads/LeadDetailsForm';
 import { LeadNotesPanel } from '@/components/leads/LeadNotesPanel';
 import { StageBadge } from './StageBadge';
+import { SheetSkeleton } from '@/components/ui/skeleton';
 
 interface PipelineDetail {
   lead: Lead;
@@ -199,10 +200,7 @@ export function PipelineDetailSheet({ leadId, onClose, onUpdated }: PipelineDeta
         </SheetHeader>
 
         {loading && !lead ? (
-          <div className="flex items-center justify-center py-16 text-stone-500">
-            <Loader2 className="animate-spin mr-2" size={16} />
-            <span className="text-sm">Se încarcă...</span>
-          </div>
+          <SheetSkeleton />
         ) : lead ? (
           <div className="p-4 space-y-6">
             {/* Etapă */}

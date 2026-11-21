@@ -17,7 +17,7 @@ export default function ThemeToggle() {
       aria-label={label}
       title={label}
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="relative inline-flex h-9 w-16 flex-shrink-0 items-center rounded-full border transition-colors selector-bg selector-border"
+      className="header-control relative inline-flex h-9 w-16 flex-shrink-0 items-center rounded-full border transition-colors selector-bg selector-border"
     >
       <span
         className={`absolute left-1 flex h-7 w-7 items-center justify-center rounded-full transition-transform duration-300 ease-out ${

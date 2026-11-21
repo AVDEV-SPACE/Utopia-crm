@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { ChevronDown, Cpu, Loader2, Play, Sparkles, Square, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MultiValueInput } from './MultiValueInput';
+import { ImportForm } from '@/components/leads/ImportForm';
+import { SegmentedControl } from '@/components/motion/SegmentedControl';
 import type { EngineRun, EngineSettings, EngineStats } from '@/services/engine/types';
 import { KNOWN_NICHES } from '@/services/leads/osm-categories';
 import { RO_CITIES } from '@/services/leads/ro-cities';
@@ -45,6 +47,7 @@ const toList = (text: string) => text.split(/[\n,]/).map((s) => s.trim()).filter
 export function EnginePanel({ onChanged }: EnginePanelProps) {
   const [state, setState] = useState<EngineState | null>(null);
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<'engine' | 'import'>('engine');
   const [running, setRunning] = useState<'discover' | 'enrich' | null>(null);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -229,7 +232,7 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
   if (forbidden) return null;
 
   return (
-    <section className="rounded-xl border border-stone-800/60 bg-stone-900/60">
+    <section className="glass-card">
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
         <Cpu size={16} className="text-amber-400" />
         <h2 className="text-sm font-semibold text-stone-100">Motor leaduri</h2>
@@ -246,7 +249,17 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
             </span>
           </div>
         )}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        {/* Două surse de leaduri în același panou: motorul (nișe × orașe) sau importul */}
+        <SegmentedControl
+          aria-label="Sursa leadurilor"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'engine', label: 'Motor' },
+            { value: 'import', label: 'Import Sheet / CSV' },
+          ]}
+        />
+        <div className={`ml-auto flex flex-wrap items-center gap-2 ${mode === 'import' ? 'hidden' : ''}`}>
           {running === 'discover' && progress ? (
             <Button size="sm" variant="outline" onClick={() => { stopRequested.current = true; }}>
               <Square />
@@ -269,8 +282,14 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
         </div>
       </div>
 
+      {mode === 'import' && (
+        <div className="border-t border-stone-800/60 p-4">
+          <ImportForm onImported={onChanged} />
+        </div>
+      )}
+
       {/* Ținta unei rulări discover: oricâte nișe și orașe, fiecare combinație e o căutare */}
-      <div className="grid gap-2 border-t border-stone-800/60 px-4 py-3 md:grid-cols-2">
+      <div className={`grid gap-2 border-t border-stone-800/60 px-4 py-3 md:grid-cols-2 ${mode === 'import' ? 'hidden' : ''}`}>
         <MultiValueInput
           label="Nișe"
           values={targetNiches}
@@ -296,7 +315,7 @@ export function EnginePanel({ onChanged }: EnginePanelProps) {
         </p>
       </div>
 
-      {open && state && (
+      {mode === 'engine' && open && state && (
         <div className="border-t border-stone-800/60 p-4 space-y-5">
           <div className="grid gap-4 md:grid-cols-2">
             <Field

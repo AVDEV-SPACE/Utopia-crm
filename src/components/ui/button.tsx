@@ -9,11 +9,17 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        // Tema comută prin `data-theme`, nu prin clasa `.dark`, deci variantele
+        // `dark:` nu se aplicau: conturul rămânea `currentColor` (alb pe dark).
+        // Culorile vin acum din tokenii temei, identic pe light și dark.
+        default: "bg-amber-500 text-white hover:bg-amber-400",
         destructive:
-          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20",
         outline:
-          "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+          "border border-[var(--card-border)] bg-[var(--surface-1)] text-stone-300 hover:bg-[var(--surface-2)] hover:text-stone-100 hover:border-[var(--card-border-hover)]",
+        // Acțiunea primară dintr-un rând de tabel: accent discret, nu buton plin
+        accent:
+          "border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost:

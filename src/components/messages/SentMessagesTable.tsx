@@ -8,7 +8,6 @@ import {
   Facebook,
   Instagram,
   Linkedin,
-  Loader2,
   Mail,
   MessageCircle,
   RefreshCw,
@@ -17,6 +16,11 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { MessageChannel, SentMessage } from '@/services/messages/types';
+import { useLiveRefresh } from '@/hooks/use-live-refresh';
+import { TableSkeleton } from '@/components/ui/skeleton';
+
+/** Trimiterile automate (outreach, follow-up-uri) și răspunsurile apar fără refresh. */
+const REFRESH_MS = 30_000;
 
 interface SentMessagesTableProps {
   /** Limitează jurnalul la un singur lead (ex. din fișa lead-ului). */
@@ -95,6 +99,8 @@ export function SentMessagesTable({ leadId, recipientType, emptyMessage }: SentM
       setError(null);
     } catch (err) {
       console.error(err);
+      // O eroare la reîncărcarea din fundal nu golește jurnalul deja afișat
+      if (silent) return;
       setMessages([]);
       setError(err instanceof Error ? err.message : 'Eroare la încărcarea mesajelor');
     } finally {
@@ -136,6 +142,9 @@ export function SentMessagesTable({ leadId, recipientType, emptyMessage }: SentM
       cancelled = true;
     };
   }, [fetchMessages, syncReplies]);
+
+  // Doar citește jurnalul; verificarea Gmail rămâne la montare și pe butonul „Reîmprospătează”
+  useLiveRefresh(useCallback(() => fetchMessages(true), [fetchMessages]), REFRESH_MS);
 
   const refresh = async () => {
     await fetchMessages();
@@ -214,9 +223,7 @@ export function SentMessagesTable({ leadId, recipientType, emptyMessage }: SentM
 
       {/* Tabel */}
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-stone-500">
-          <Loader2 className="animate-spin mr-2" size={18} /> Se încarcă mesajele trimise...
-        </div>
+        <TableSkeleton rows={6} cols={5} label="Se încarcă mesajele trimise" />
       ) : error ? (
         <div className="text-center py-16 text-sm text-red-400">{error}</div>
       ) : visibleMessages.length === 0 ? (

@@ -29,7 +29,7 @@ export function ScanForm({ onScan, loading }: ScanFormProps) {
   };
 
   return (
-    <div className="flex flex-col sm:flex-row items-end gap-3 bg-stone-900/60 border border-stone-800/60 rounded-xl p-4">
+    <div className="glass-card glass-card--hero flex flex-col sm:flex-row items-end gap-3 p-4">
       <div className="flex-1 w-full">
         <Label className="text-xs text-stone-500 mb-1.5 block">Nișă</Label>
         <Input
