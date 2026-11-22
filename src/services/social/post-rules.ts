@@ -1,5 +1,5 @@
 import type { MediaKind } from '@/services/media/limits';
-import type { SocialChannel } from './config';
+import type { SocialPlatform } from './config';
 
 /**
  * Regulile unei postări, fără dependențe de server: le folosesc și API-ul
@@ -41,9 +41,15 @@ const IG_REEL_SECONDS = { min: 3, max: 900 };
 const IG_CAROUSEL_VIDEO_MAX_SECONDS = 60;
 
 /** Motivul pentru care platforma ar respinge postarea, sau null dacă e publicabilă. */
-export function postProblem(platform: SocialChannel, media: PostMediaItem[]): string | null {
+export function postProblem(platform: SocialPlatform, media: PostMediaItem[]): string | null {
   const format = postFormat(media);
   if (media.length > MAX_POST_MEDIA) return `Maximum ${MAX_POST_MEDIA} elemente într-un carusel`;
+
+  if (platform === 'linkedin') {
+    // Videos API cere upload pe bucăți — nesuportat încă; imaginile (1 sau 2–20) merg
+    if (media.some((m) => m.kind === 'video')) return 'LinkedIn: video-ul nu e suportat încă — folosește imagini sau text';
+    return null;
+  }
 
   if (platform === 'facebook') {
     if (format === 'carousel' && media.some((m) => m.kind === 'video')) {

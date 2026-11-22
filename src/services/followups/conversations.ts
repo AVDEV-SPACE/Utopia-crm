@@ -5,6 +5,7 @@ import {
   ConversationMessage,
   ConversationMessageKind,
   ConversationRole,
+  SocialConversationChannel,
 } from './types';
 
 /**
@@ -122,7 +123,7 @@ export async function setHumanTakeover(input: {
  */
 export async function getOrCreateSocialConversation(input: {
   orgId: string;
-  channel: Extract<ConversationChannel, 'facebook' | 'instagram'>;
+  channel: SocialConversationChannel;
   externalUserId: string;
   contactName?: string | null;
 }): Promise<Conversation> {
@@ -186,7 +187,7 @@ export interface SocialConversationSummary extends Conversation {
 
 export async function listSocialConversations(
   orgId: string,
-  channel: Extract<ConversationChannel, 'facebook' | 'instagram'> | null,
+  channel: SocialConversationChannel | null,
   limit = 100
 ): Promise<SocialConversationSummary[]> {
   const rows = await sql`
@@ -199,7 +200,7 @@ export async function listSocialConversations(
       WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1
     ) last ON true
     WHERE c.org_id = ${orgId}
-      AND c.channel IN ('facebook', 'instagram')
+      AND c.channel IN ('facebook', 'instagram', 'linkedin')
       AND (${channel}::text IS NULL OR c.channel = ${channel})
     ORDER BY c.last_message_at DESC
     LIMIT ${limit}

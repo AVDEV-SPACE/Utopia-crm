@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Linkedin } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { LinkedInPanel } from '@/components/socials/LinkedInPanel';
 import { MediaLibrary } from '@/components/socials/MediaLibrary';
 import { SocialInbox } from '@/components/socials/SocialInbox';
 import { SocialPosts } from '@/components/socials/SocialPosts';
@@ -17,22 +18,40 @@ const TABS: { value: Tab; label: string }[] = [
   { value: 'linkedin', label: 'LinkedIn' },
 ];
 
+const isTab = (value: string | null): value is Tab => TABS.some((t) => t.value === value);
+
 /**
- * /socials: Facebook Page + Instagram Business în CRM — inbox (DM-uri și
- * comentarii, cu auto-reply AI pe mesajele primite), postări programate (text,
- * imagine, carusel, video), biblioteca media și
- * starea conexiunii. LinkedIn: în așteptarea aprobării API-ului.
+ * /socials: Facebook Page + Instagram Business + pagina de companie LinkedIn în
+ * CRM — inbox (DM-uri și comentarii, cu auto-reply AI pe DM-urile Meta),
+ * postări programate (text, imagine, carusel, video), biblioteca media și
+ * starea conexiunilor. `?tab=` deschide direct un tab (ex. revenirea din OAuth LinkedIn).
  */
 export default function SocialsPage() {
   const [tab, setTab] = useState<Tab>('inbox');
+
+  // Revenirea din autorizarea LinkedIn: tab-ul și rezultatul vin în query
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('tab');
+    if (isTab(requested)) setTab(requested);
+    if (params.get('linkedin') === 'connected') toast.success('Pagina LinkedIn a fost conectată');
+    const error = params.get('linkedin_error');
+    if (error) toast.error(`LinkedIn: ${error}`);
+    if (params.has('linkedin') || params.has('linkedin_error')) {
+      params.delete('linkedin');
+      params.delete('linkedin_error');
+      const query = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="page-title text-stone-100">Socials</h1>
         <p className="text-sm text-stone-500">
-          Mesajele și comentariile de pe pagina de Facebook și contul de Instagram, într-un singur inbox, plus postări
-          programate. Fiecare persoană care scrie devine un lead în Pipeline.
+          Mesajele și comentariile de pe Facebook, Instagram și LinkedIn, într-un singur inbox, plus postări programate
+          pe toate trei. Fiecare persoană care scrie devine un lead în Pipeline.
         </p>
       </div>
 
@@ -60,18 +79,7 @@ export default function SocialsPage() {
         </section>
       )}
       {tab === 'settings' && <SocialSettings />}
-      {tab === 'linkedin' && (
-        <div className="flex items-start gap-3 rounded-xl border border-stone-800/60 bg-stone-900/60 p-5">
-          <Linkedin size={18} className="mt-0.5 text-stone-400" />
-          <div>
-            <p className="text-sm font-medium text-stone-200">LinkedIn — în aprobare</p>
-            <p className="mt-1 text-xs text-stone-500">
-              Accesul la API-ul LinkedIn așteaptă aprobarea. Până atunci, mesajele LinkedIn se trimit manual din fișa lead-ului
-              (Pipeline → Trimite un mesaj), iar trimiterea se înregistrează în istoric.
-            </p>
-          </div>
-        </div>
-      )}
+      {tab === 'linkedin' && <LinkedInPanel />}
     </div>
   );
 }

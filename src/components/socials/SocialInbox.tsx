@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { Facebook, Hand, Instagram, Loader2, MessageSquare, RefreshCw, Reply, Send, X } from 'lucide-react';
+import { Facebook, Hand, Instagram, Linkedin, Loader2, MessageSquare, RefreshCw, Reply, Send, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Conversation, ConversationMessage } from '@/services/followups/types';
 import type { SocialConversationSummary } from '@/services/followups/conversations';
 import { useLiveRefresh } from '@/hooks/use-live-refresh';
 import { ListSkeleton, MessagesSkeleton } from '@/components/ui/skeleton';
 
-type ChannelFilter = 'all' | 'facebook' | 'instagram';
+type ChannelFilter = 'all' | 'facebook' | 'instagram' | 'linkedin';
 
 interface Thread {
   conversation: Conversation;
@@ -21,12 +21,13 @@ interface Thread {
 /** Cât de des se reîncarcă inbox-ul cât timp tab-ul e vizibil. */
 const REFRESH_MS = 10_000;
 
-const CHANNEL_ICON = { facebook: Facebook, instagram: Instagram } as const;
+const CHANNEL_ICON = { facebook: Facebook, instagram: Instagram, linkedin: Linkedin } as const;
+const CHANNEL_LABEL: Record<string, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };
 
 const timeFormatter = new Intl.DateTimeFormat('ro-RO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
 function displayName(c: Pick<Conversation, 'contact_name' | 'channel' | 'external_user_id'>): string {
-  return c.contact_name || `Contact ${c.channel === 'instagram' ? 'Instagram' : 'Facebook'} ${(c.external_user_id ?? '').slice(-6)}`;
+  return c.contact_name || `Contact ${CHANNEL_LABEL[c.channel] ?? 'social'} ${(c.external_user_id ?? '').slice(-6)}`;
 }
 
 /**
@@ -151,7 +152,7 @@ export function SocialInbox() {
       {/* Lista conversațiilor */}
       <div className="rounded-xl border border-stone-800/60 bg-stone-900/60">
         <div className="flex items-center gap-1.5 border-b border-stone-800/60 p-3">
-          {(['all', 'facebook', 'instagram'] as const).map((value) => (
+          {(['all', 'facebook', 'instagram', 'linkedin'] as const).map((value) => (
             <button
               key={value}
               onClick={() => setFilter(value)}
@@ -161,7 +162,7 @@ export function SocialInbox() {
                   : 'bg-stone-900/60 text-stone-500 border border-stone-800/60 hover:text-stone-400'
               }`}
             >
-              {value === 'all' ? 'Toate' : value === 'facebook' ? 'Facebook' : 'Instagram'}
+              {value === 'all' ? 'Toate' : CHANNEL_LABEL[value]}
             </button>
           ))}
           <button onClick={() => loadList()} className="ml-auto p-1 text-stone-500 hover:text-stone-200" aria-label="Reîmprospătează">
@@ -175,12 +176,12 @@ export function SocialInbox() {
           <p className="p-4 text-sm text-red-400">{listError}</p>
         ) : conversations.length === 0 ? (
           <p className="p-4 text-sm text-stone-500">
-            Nicio conversație încă. Mesajele și comentariile primite pe pagină și pe Instagram apar aici.
+            Nicio conversație încă. Mesajele și comentariile de pe Facebook, Instagram și LinkedIn apar aici.
           </p>
         ) : (
           <ul className="max-h-[65vh] overflow-y-auto">
             {conversations.map((c) => {
-              const Icon = CHANNEL_ICON[c.channel as 'facebook' | 'instagram'] ?? MessageSquare;
+              const Icon = CHANNEL_ICON[c.channel as keyof typeof CHANNEL_ICON] ?? MessageSquare;
               return (
                 <li key={c.id}>
                   <button
@@ -220,7 +221,7 @@ export function SocialInbox() {
           <>
             <div className="flex flex-wrap items-center gap-2 border-b border-stone-800/60 px-4 py-3">
               <span className="text-sm font-semibold text-stone-100">{displayName(thread.conversation)}</span>
-              <span className="text-xs text-stone-500">{thread.conversation.channel === 'instagram' ? 'Instagram' : 'Facebook'}</span>
+              <span className="text-xs text-stone-500">{CHANNEL_LABEL[thread.conversation.channel] ?? thread.conversation.channel}</span>
               {thread.conversation.lead_id && (
                 <Link href={`/pipeline?lead=${thread.conversation.lead_id}`} className="text-xs text-amber-400 hover:underline">
                   Fișa lead-ului
@@ -277,6 +278,10 @@ export function SocialInbox() {
                     <X size={12} />
                   </button>
                 </div>
+              ) : thread.conversation.channel === 'linkedin' ? (
+                <p className="text-[11px] text-stone-600">
+                  LinkedIn nu permite mesaje directe prin API: alege „Răspunde public” la un comentariu (răspunzi ca pagina Utopia Systems).
+                </p>
               ) : (
                 <p className={`text-[11px] ${windowOpen ? 'text-stone-600' : 'text-amber-400/90'}`}>
                   {windowOpen

@@ -1,18 +1,18 @@
 import { sql } from '@/lib/neon';
 import { createAutomationLead } from '@/services/leads/repository';
 import type { Lead } from '@/services/leads/types';
-import type { SocialChannel } from './config';
+import type { SocialPlatform } from './config';
 
 /**
- * Lead-ul CRM al unei persoane care scrie pe Facebook / Instagram.
+ * Lead-ul CRM al unei persoane care scrie pe Facebook / Instagram (sau comentează pe LinkedIn).
  * Ordinea: lead-ul creat anterior pentru același PSID / IGSID (`source_ref`),
  * apoi (pe Instagram) un lead existent cu același username, altfel unul nou.
  */
 
-const CHANNEL_LABELS: Record<SocialChannel, string> = { facebook: 'Facebook', instagram: 'Instagram' };
+const CHANNEL_LABELS: Record<SocialPlatform, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };
+const SOURCE_REF_PREFIX: Record<SocialPlatform, string> = { facebook: 'fb', instagram: 'ig', linkedin: 'li' };
 
-const sourceRefFor = (channel: SocialChannel, externalUserId: string) =>
-  `${channel === 'facebook' ? 'fb' : 'ig'}:${externalUserId}`;
+const sourceRefFor = (channel: SocialPlatform, externalUserId: string) => `${SOURCE_REF_PREFIX[channel]}:${externalUserId}`;
 
 async function findBySourceRef(sourceRef: string): Promise<Lead | null> {
   const rows = await sql`SELECT * FROM leads WHERE source_ref = ${sourceRef} LIMIT 1`;
@@ -34,7 +34,7 @@ async function findByInstagramUsername(username: string): Promise<Lead | null> {
 
 export async function findOrCreateSocialLead(input: {
   orgId: string;
-  channel: SocialChannel;
+  channel: SocialPlatform;
   externalUserId: string;
   name: string | null;
   username: string | null;

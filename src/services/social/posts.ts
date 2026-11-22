@@ -1,5 +1,5 @@
 import { sql } from '@/lib/neon';
-import type { SocialChannel } from './config';
+import type { SocialPlatform } from './config';
 import type { PostFormat, PostMediaItem } from './post-rules';
 
 /** Postările programate pe Facebook / Instagram (tabela social_posts). */
@@ -9,7 +9,7 @@ export type SocialPostStatus = 'draft' | 'scheduled' | 'publishing' | 'published
 export interface SocialPost {
   id: string;
   org_id: string;
-  platform: SocialChannel;
+  platform: SocialPlatform;
   status: SocialPostStatus;
   caption: string;
   format: PostFormat;
@@ -58,7 +58,7 @@ function withLegacyMedia(post: SocialPostWithMedia): SocialPostWithMedia {
 
 export async function createSocialPost(input: {
   orgId: string;
-  platform: SocialChannel;
+  platform: SocialPlatform;
   status: 'draft' | 'scheduled';
   caption: string;
   format: PostFormat;

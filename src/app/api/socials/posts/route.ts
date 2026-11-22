@@ -13,7 +13,7 @@ export const revalidate = 0;
 // „Publică acum” pe ambele platforme, cu un reel Instagram, așteaptă procesarea video-ului
 export const maxDuration = 300;
 
-const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram' } as const;
+const PLATFORM_LABELS = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' } as const;
 
 export async function GET() {
   const access = await requireSocialAccess();
@@ -35,9 +35,9 @@ export async function GET() {
 const bodySchema = z
   .object({
     platforms: z
-      .array(z.enum(['facebook', 'instagram']))
+      .array(z.enum(['facebook', 'instagram', 'linkedin']))
       .min(1, 'Alege cel puțin o platformă')
-      .max(2)
+      .max(3)
       .transform((list) => [...new Set(list)]),
     caption: z.string().trim().max(2200, 'Textul depășește 2200 de caractere'),
     /** Elementele din biblioteca media, în ordinea de afișare */

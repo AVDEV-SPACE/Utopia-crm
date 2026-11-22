@@ -47,7 +47,7 @@ export type TimelineItem = TimelineMessage | TimelineEvent;
 const SENT_EVENT = /_sent(_manual)?$/;
 
 /** Pe Facebook / Instagram mesajele vin din conversație; evenimentele lor ar fi dubluri. */
-const SOCIAL_CHANNELS = new Set(['facebook', 'instagram']);
+const SOCIAL_CHANNELS = new Set(['facebook', 'instagram', 'linkedin']);
 const SOCIAL_MESSAGE_EVENTS = new Set(['reply_received', 'comment_received']);
 
 const plain = (body: string) => (isHtmlContent(body) ? htmlToText(body) : body.trim()).slice(0, MAX_BODY);
@@ -97,7 +97,7 @@ export async function getLeadTimeline(leadId: string, limit = 300): Promise<Time
         SELECT m.id::text, c.channel, m.role, m.body, m.kind, m.created_at
         FROM conversations c
         JOIN conversation_messages m ON m.conversation_id = c.id
-        WHERE c.lead_id = ${leadId}::uuid AND c.channel IN ('facebook', 'instagram')
+        WHERE c.lead_id = ${leadId}::uuid AND c.channel IN ('facebook', 'instagram', 'linkedin')
         ORDER BY m.created_at DESC LIMIT ${limit}
       `,
       []
