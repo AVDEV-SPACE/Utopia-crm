@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireSocialAccess } from '@/lib/social-auth';
 import { getConversation, lastInboundDmAt, listConversationMessages } from '@/services/followups/conversations';
+import { SOCIAL_CONVERSATION_CHANNELS, type SocialConversationChannel } from '@/services/followups/types';
 import { MESSAGING_WINDOW_MS } from '@/services/social/inbox';
 
 export const runtime = 'nodejs';
@@ -19,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const conversation = await getConversation(id, access.orgId);
-    if (!conversation || (conversation.channel !== 'facebook' && conversation.channel !== 'instagram')) {
+    if (!conversation || !SOCIAL_CONVERSATION_CHANNELS.includes(conversation.channel as SocialConversationChannel)) {
       return NextResponse.json({ error: 'Conversație negăsită' }, { status: 404 });
     }
     const [messages, lastInbound] = await Promise.all([listConversationMessages(id), lastInboundDmAt(id)]);

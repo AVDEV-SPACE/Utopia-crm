@@ -7,6 +7,9 @@ const DEFAULT_GRAPH_VERSION = 'v26.0';
 
 export type SocialChannel = 'facebook' | 'instagram';
 
+/** Platformele de publicare: canalele Meta plus pagina de companie LinkedIn (services/social/linkedin). */
+export type SocialPlatform = SocialChannel | 'linkedin';
+
 export function graphVersion(): string {
   return process.env.META_GRAPH_VERSION?.trim() || DEFAULT_GRAPH_VERSION;
 }

@@ -7,13 +7,13 @@ export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 export const revalidate = 0;
 
-/** Inbox-ul /socials: conversațiile Facebook / Instagram, cele mai recente sus. `?channel=` filtrează. */
+/** Inbox-ul /socials: conversațiile Facebook / Instagram / LinkedIn, cele mai recente sus. `?channel=` filtrează. */
 export async function GET(req: NextRequest) {
   const access = await requireSocialAccess();
   if (access instanceof NextResponse) return access;
 
   const channelParam = req.nextUrl.searchParams.get('channel');
-  const channel = channelParam === 'facebook' || channelParam === 'instagram' ? channelParam : null;
+  const channel = channelParam === 'facebook' || channelParam === 'instagram' || channelParam === 'linkedin' ? channelParam : null;
 
   try {
     const conversations = await listSocialConversations(access.orgId, channel);

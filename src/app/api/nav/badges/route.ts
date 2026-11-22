@@ -37,7 +37,7 @@ export async function GET() {
           SELECT COUNT(*) AS n
           FROM conversations c
           WHERE c.org_id = ${tenant.orgId}
-            AND (c.channel IN ('facebook', 'instagram')) = ${social}
+            AND (c.channel IN ('facebook', 'instagram', 'linkedin')) = ${social}
             AND (
               SELECT m.role FROM conversation_messages m
               WHERE m.conversation_id = c.id

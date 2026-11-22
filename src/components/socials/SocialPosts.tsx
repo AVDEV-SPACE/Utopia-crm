@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, Clapperboard, Facebook, Images, Instagram, Loader2, Send, Sparkles, Trash2, Upload, Wand2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clapperboard, Facebook, Images, Instagram, Linkedin, Loader2, Send, Sparkles, Trash2, Upload, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { SocialMedia } from '@/services/media/repository';
 import { FORMAT_LABELS, MAX_POST_MEDIA, postFormat, postProblem, type PostMediaItem } from '@/services/social/post-rules';
@@ -15,13 +15,17 @@ import { ListSkeleton } from '@/components/ui/skeleton';
 /** Jobul programat schimbă statusul postărilor (Programată → Publicată/Eșuată). */
 const REFRESH_MS = 30_000;
 
-type Platform = 'facebook' | 'instagram';
+type Platform = 'facebook' | 'instagram' | 'linkedin';
 type Mode = 'now' | 'schedule' | 'draft';
 
 const PLATFORMS: { value: Platform; label: string; icon: typeof Facebook }[] = [
   { value: 'facebook', label: 'Facebook', icon: Facebook },
   { value: 'instagram', label: 'Instagram', icon: Instagram },
+  { value: 'linkedin', label: 'LinkedIn', icon: Linkedin },
 ];
+
+const PLATFORM_LABEL: Record<Platform, string> = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };
+const PLATFORM_ICON: Record<Platform, typeof Facebook> = { facebook: Facebook, instagram: Instagram, linkedin: Linkedin };
 
 const STATUS_META: Record<SocialPostStatus, { label: string; className: string }> = {
   draft: { label: 'Ciornă', className: 'text-stone-400 border-stone-700/60' },
@@ -147,7 +151,7 @@ export function SocialPosts() {
       if (!res.ok) throw new Error(data.error ?? 'Nu am putut salva postarea');
       if (mode === 'now') {
         for (const result of data.results as { platform: Platform; published: boolean; error: string | null }[]) {
-          const label = result.platform === 'facebook' ? 'Facebook' : 'Instagram';
+          const label = PLATFORM_LABEL[result.platform];
           if (result.published) toast.success(`${label}: postare publicată`);
           else toast.error(`${label}: publicarea a eșuat — ${result.error ?? 'eroare'}`);
         }
@@ -201,7 +205,7 @@ export function SocialPosts() {
   const problems = platforms
     .map((p) => {
       const problem = postProblem(p, postMedia);
-      return problem ? `${p === 'facebook' ? 'Facebook' : 'Instagram'}: ${problem}` : null;
+      return problem ? `${PLATFORM_LABEL[p]}: ${problem}` : null;
     })
     .filter((p): p is string => Boolean(p));
   const empty = !caption.trim() && media.length === 0;
@@ -339,7 +343,7 @@ export function SocialPosts() {
         <ul className="space-y-2">
           {posts.map((post) => {
             const status = STATUS_META[post.status];
-            const Icon = post.platform === 'instagram' ? Instagram : Facebook;
+            const Icon = PLATFORM_ICON[post.platform] ?? Facebook;
             const when = post.published_at ?? post.scheduled_at ?? post.created_at;
             const editable = post.status === 'draft' || post.status === 'scheduled' || post.status === 'failed';
             return (

@@ -1,4 +1,4 @@
-import type { SocialChannel } from './config';
+import type { SocialPlatform } from './config';
 import {
   publishFacebookAlbum,
   publishFacebookPost,
@@ -7,6 +7,7 @@ import {
   publishInstagramPost,
   publishInstagramReel,
 } from './graph';
+import { publishLinkedInPost } from './linkedin/publish';
 import { postFormat, postProblem, type PostFormat, type PostMediaItem } from './post-rules';
 
 /**
@@ -16,7 +17,7 @@ import { postFormat, postProblem, type PostFormat, type PostMediaItem } from './
  */
 type Publisher = (caption: string, media: PostMediaItem[]) => Promise<string>;
 
-const STRATEGIES: Record<SocialChannel, Partial<Record<PostFormat, Publisher>>> = {
+const STRATEGIES: Record<SocialPlatform, Partial<Record<PostFormat, Publisher>>> = {
   facebook: {
     text: (caption) => publishFacebookPost(caption),
     single: (caption, [image]) => publishFacebookPost(caption, image.url),
@@ -28,9 +29,14 @@ const STRATEGIES: Record<SocialChannel, Partial<Record<PostFormat, Publisher>>> 
     carousel: (caption, media) => publishInstagramCarousel(caption, media),
     reel: (caption, [video]) => publishInstagramReel(caption, video.url),
   },
+  linkedin: {
+    text: (caption) => publishLinkedInPost(caption, []),
+    single: (caption, media) => publishLinkedInPost(caption, media),
+    carousel: (caption, media) => publishLinkedInPost(caption, media),
+  },
 };
 
-export function publishToPlatform(platform: SocialChannel, caption: string, media: PostMediaItem[]): Promise<string> {
+export function publishToPlatform(platform: SocialPlatform, caption: string, media: PostMediaItem[]): Promise<string> {
   const problem = postProblem(platform, media);
   if (problem) throw new Error(problem);
   const publisher = STRATEGIES[platform][postFormat(media)];

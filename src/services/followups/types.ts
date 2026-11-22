@@ -1,12 +1,19 @@
 // Tipurile modulului AI Follow-Up & WhatsApp Automation (și ale inbox-ului /socials).
 
-/** WhatsApp / SMS prin Twilio (identificate prin telefon); Facebook / Instagram prin Meta (id extern). */
-export type ConversationChannel = 'whatsapp' | 'sms' | 'facebook' | 'instagram';
+/**
+ * WhatsApp / SMS prin Twilio (identificate prin telefon); Facebook / Instagram prin Meta
+ * și LinkedIn (doar comentarii la postările paginii) prin id extern.
+ */
+export type ConversationChannel = 'whatsapp' | 'sms' | 'facebook' | 'instagram' | 'linkedin';
+
+/** Canalele inbox-ului /socials (persoana are id extern, nu telefon). */
+export type SocialConversationChannel = Extract<ConversationChannel, 'facebook' | 'instagram' | 'linkedin'>;
+export const SOCIAL_CONVERSATION_CHANNELS: readonly SocialConversationChannel[] = ['facebook', 'instagram', 'linkedin'];
 
 /** Canalele pe care persoana e un telefon (restul: PSID / IGSID în `external_user_id`). */
 export const PHONE_CHANNELS: readonly ConversationChannel[] = ['whatsapp', 'sms'];
 
-/** Un mesaj direct sau un comentariu public (doar pe Facebook / Instagram). */
+/** Un mesaj direct sau un comentariu public (Facebook / Instagram / LinkedIn — pe LinkedIn doar comentarii). */
 export type ConversationMessageKind = 'dm' | 'comment';
 
 /** 'user' = clientul, 'assistant' = AI, 'human' = operator uman din CRM */

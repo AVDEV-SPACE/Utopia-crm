@@ -10,6 +10,8 @@ import {
 } from '@/services/followups/conversations';
 import { GraphError, MESSAGE_MAX_CHARS, replyFacebookComment, replyInstagramComment } from '@/services/social/graph';
 import { MESSAGING_WINDOW_MS, sendSocialMessage } from '@/services/social/inbox';
+import { LinkedInError } from '@/services/social/linkedin/api';
+import { replyLinkedInComment } from '@/services/social/linkedin/comments';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -39,11 +41,36 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const conversation = await getConversation(id, access.orgId);
-    if (!conversation?.external_user_id || (conversation.channel !== 'facebook' && conversation.channel !== 'instagram')) {
+    if (
+      !conversation?.external_user_id ||
+      (conversation.channel !== 'facebook' && conversation.channel !== 'instagram' && conversation.channel !== 'linkedin')
+    ) {
       return NextResponse.json({ error: 'Conversație negăsită' }, { status: 404 });
     }
-    const channel = conversation.channel;
     const { text, commentId } = parsed.data;
+
+    // LinkedIn: doar răspuns public la un comentariu (API-ul nu permite mesaje directe)
+    if (conversation.channel === 'linkedin') {
+      const target = commentId
+        ? (await listConversationMessages(id)).find((m) => m.id === commentId && m.kind === 'comment' && m.role === 'user')
+        : null;
+      if (!target?.external_id || !target.external_parent_id) {
+        return NextResponse.json({ error: 'Pe LinkedIn poți răspunde doar la un comentariu — alege „Răspunde” la comentariu' }, { status: 400 });
+      }
+      const externalId = await replyLinkedInComment(access.orgId, target.external_id, target.external_parent_id, text);
+      const message = await appendSocialMessage({
+        conversationId: id,
+        role: 'human',
+        body: text,
+        externalId,
+        kind: 'comment',
+        externalParentId: target.external_id,
+      });
+      await setHumanTakeover({ conversationId: id, orgId: access.orgId, takenByHuman: true, userId: access.userId });
+      return NextResponse.json({ message });
+    }
+
+    const channel = conversation.channel;
 
     let externalId: string | null;
     let kind: 'dm' | 'comment';
@@ -74,6 +101,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await setHumanTakeover({ conversationId: id, orgId: access.orgId, takenByHuman: true, userId: access.userId });
     return NextResponse.json({ message });
   } catch (error) {
+    if (error instanceof LinkedInError) {
+      console.warn('[socials/reply] LinkedIn a refuzat:', error.message);
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status === 401 ? 401 : 502 });
+    }
     if (error instanceof GraphError) {
       console.warn('[socials/reply] Graph a refuzat:', error.message);
       return NextResponse.json({ error: error.message, code: error.code }, { status: 502 });
